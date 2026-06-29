@@ -1,0 +1,554 @@
+import { useSyncExternalStore } from "react";
+import type {
+  AppState,
+  Applicant,
+  Criterion,
+  EmailTemplate,
+  HumanDecision,
+  Role,
+} from "./types";
+
+function cr(criterionId: string, match: "met" | "not-met" | "partial", note: string) {
+  return { criterionId, match, note };
+}
+
+const roles: Role[] = [
+  {
+    id: "r1",
+    title: "Registered physiotherapist",
+    department: "Physiotherapy",
+    status: "open",
+    createdDate: "2026-05-20",
+    criteria: [
+      {
+        id: "r1-c1",
+        label: "Registration in good standing",
+        detail:
+          "Must hold a valid Physiotherapist registration with the College of Physiotherapists of Ontario.",
+        weight: "required",
+      },
+      {
+        id: "r1-c2",
+        label: "Minimum years of experience",
+        detail: "At least 3 years of clinical experience in an outpatient setting.",
+        weight: "required",
+      },
+      {
+        id: "r1-c3",
+        label: "Pediatric experience",
+        detail: "Experience treating pediatric patients.",
+        weight: "preferred",
+      },
+      {
+        id: "r1-c4",
+        label: "Manual therapy certification",
+        detail: "Completed manual therapy or dry needling certification.",
+        weight: "nice-to-have",
+      },
+    ],
+  },
+  {
+    id: "r2",
+    title: "Registered massage therapist (RMT)",
+    department: "Massage therapy",
+    status: "open",
+    createdDate: "2026-06-02",
+    criteria: [
+      {
+        id: "r2-c1",
+        label: "RMT registration",
+        detail: "Valid RMT registration with the CMTO.",
+        weight: "required",
+      },
+      {
+        id: "r2-c2",
+        label: "Evening & weekend availability",
+        detail: "Available for evening and weekend shifts.",
+        weight: "preferred",
+      },
+      {
+        id: "r2-c3",
+        label: "Deep tissue & sports massage",
+        detail: "Trained in deep tissue and sports massage techniques.",
+        weight: "preferred",
+      },
+    ],
+  },
+  {
+    id: "r3",
+    title: "Clinic front desk coordinator",
+    department: "Administration",
+    status: "open",
+    createdDate: "2026-06-15",
+    criteria: [
+      {
+        id: "r3-c1",
+        label: "Scheduling / EMR software",
+        detail: "Experience with clinic scheduling or EMR software (e.g. Jane, Telus).",
+        weight: "required",
+      },
+      {
+        id: "r3-c2",
+        label: "Customer service experience",
+        detail: "2+ years in a patient-facing or customer service role.",
+        weight: "required",
+      },
+      {
+        id: "r3-c3",
+        label: "Bilingual (EN/FR)",
+        detail: "Conversational French is an asset.",
+        weight: "nice-to-have",
+      },
+    ],
+  },
+  {
+    id: "r4",
+    title: "Occupational therapist",
+    department: "Occupational therapy",
+    status: "closed",
+    createdDate: "2026-04-10",
+    criteria: [
+      {
+        id: "r4-c1",
+        label: "OT registration",
+        detail: "Registered with the College of Occupational Therapists of Ontario.",
+        weight: "required",
+      },
+      {
+        id: "r4-c2",
+        label: "Home assessment experience",
+        detail: "Experience conducting home safety assessments.",
+        weight: "preferred",
+      },
+    ],
+  },
+];
+
+const applicants: Applicant[] = [
+  {
+    id: "a1",
+    name: "Sarah Mitchell",
+    email: "sarah.mitchell@example.com",
+    phone: "(416) 555-0142",
+    roleId: "r1",
+    submittedDate: "2026-06-18",
+    aiScore: 87,
+    aiDecision: "advanced",
+    reasoning:
+      "Holds a valid Physiotherapist registration with the College of Physiotherapists of Ontario. Has 4 years of outpatient clinical experience, above the 3-year minimum. Resume lists pediatric rotations during residency, satisfying the preferred pediatric experience. No manual therapy certification was found, which is only nice-to-have.",
+    criteriaResults: [
+      cr("r1-c1", "met", "Valid CPO registration confirmed on resume."),
+      cr("r1-c2", "met", "4 years outpatient experience."),
+      cr("r1-c3", "met", "Pediatric rotations noted during residency."),
+      cr("r1-c4", "not-met", "No manual therapy certification listed."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "sarah-mitchell-cv.pdf" },
+      { name: "Cover letter", type: "cover-letter", fileName: "sarah-mitchell-cover.pdf" },
+    ],
+    humanDecision: "advance",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-06-20",
+    invited: true,
+    invitedDate: "2026-06-24",
+  },
+  {
+    id: "a2",
+    name: "David Chen",
+    email: "david.chen@example.com",
+    phone: "(647) 555-0199",
+    roleId: "r1",
+    submittedDate: "2026-06-21",
+    aiScore: 78,
+    aiDecision: "advanced",
+    reasoning:
+      "Meets required CPO registration. Has 3 years of clinical experience, exactly at the minimum. Cover letter does not mention experience with pediatric patients, listed as preferred. Holds a dry needling certification, a nice-to-have.",
+    criteriaResults: [
+      cr("r1-c1", "met", "CPO registration verified."),
+      cr("r1-c2", "met", "3 years experience, meets minimum."),
+      cr("r1-c3", "not-met", "No pediatric experience mentioned."),
+      cr("r1-c4", "met", "Dry needling certification listed."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "david-chen-resume.pdf" },
+    ],
+    humanDecision: null,
+  },
+  {
+    id: "a3",
+    name: "Priya Nair",
+    email: "priya.nair@example.com",
+    phone: "(905) 555-0177",
+    roleId: "r1",
+    submittedDate: "2026-06-19",
+    aiScore: 54,
+    aiDecision: "rejected",
+    reasoning:
+      "Registration could not be verified against the College of Physiotherapists of Ontario; the required credential appears to be from another province. Has 5 years of experience, but the missing required registration is disqualifying for this posting.",
+    criteriaResults: [
+      cr("r1-c1", "not-met", "Registration appears to be out-of-province."),
+      cr("r1-c2", "met", "5 years experience."),
+      cr("r1-c3", "partial", "Some pediatric exposure, not primary focus."),
+      cr("r1-c4", "met", "Manual therapy certification listed."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "priya-nair-cv.pdf" },
+      { name: "Cover letter", type: "cover-letter", fileName: "priya-nair-cover.pdf" },
+    ],
+    humanDecision: "reject",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-06-22",
+  },
+  {
+    id: "a4",
+    name: "Tomás Romero",
+    email: "tomas.romero@example.com",
+    phone: "(416) 555-0123",
+    roleId: "r1",
+    submittedDate: "2026-06-22",
+    aiScore: 61,
+    aiDecision: "rejected",
+    reasoning:
+      "Registration is valid, but only 2 years of outpatient experience were detected, below the 3-year minimum. Strong pediatric background and manual therapy certification present.",
+    criteriaResults: [
+      cr("r1-c1", "met", "CPO registration verified."),
+      cr("r1-c2", "not-met", "2 years experience, below minimum."),
+      cr("r1-c3", "met", "Strong pediatric background."),
+      cr("r1-c4", "met", "Manual therapy certification listed."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "tomas-romero-resume.pdf" },
+      { name: "Reference letter", type: "other", fileName: "tomas-romero-reference.pdf" },
+    ],
+    humanDecision: "advance",
+    overrideReason:
+      "Candidate's pediatric specialization is a strong fit for our new family clinic; the experience gap is minor and offset by certifications.",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-06-23",
+  },
+  {
+    id: "a5",
+    name: "Jessica Brown",
+    email: "jessica.brown@example.com",
+    phone: "(437) 555-0150",
+    roleId: "r2",
+    submittedDate: "2026-06-24",
+    aiScore: 90,
+    aiDecision: "advanced",
+    reasoning:
+      "Valid RMT registration with the CMTO. Indicated full availability including evenings and weekends. Trained in both deep tissue and sports massage, satisfying both preferred criteria.",
+    criteriaResults: [
+      cr("r2-c1", "met", "CMTO registration verified."),
+      cr("r2-c2", "met", "Full evening and weekend availability."),
+      cr("r2-c3", "met", "Deep tissue and sports massage training."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "jessica-brown-cv.pdf" },
+      { name: "Cover letter", type: "cover-letter", fileName: "jessica-brown-cover.pdf" },
+    ],
+    humanDecision: null,
+  },
+  {
+    id: "a6",
+    name: "Michael O'Connor",
+    email: "michael.oconnor@example.com",
+    phone: "(289) 555-0188",
+    roleId: "r2",
+    submittedDate: "2026-06-25",
+    aiScore: 48,
+    aiDecision: "rejected",
+    reasoning:
+      "No active CMTO registration could be confirmed; the required RMT credential appears to be expired. Limited availability with no evening or weekend shifts indicated.",
+    criteriaResults: [
+      cr("r2-c1", "not-met", "RMT registration appears expired."),
+      cr("r2-c2", "not-met", "No evening or weekend availability."),
+      cr("r2-c3", "partial", "General massage background only."),
+    ],
+    documents: [{ name: "Resume / CV", type: "resume", fileName: "michael-oconnor-resume.pdf" }],
+    humanDecision: null,
+  },
+  {
+    id: "a7",
+    name: "Aisha Khan",
+    email: "aisha.khan@example.com",
+    phone: "(416) 555-0166",
+    roleId: "r2",
+    submittedDate: "2026-06-17",
+    aiScore: 84,
+    aiDecision: "advanced",
+    reasoning:
+      "Valid CMTO registration. Available for weekend shifts but limited evening availability. Strong deep tissue background with some sports massage experience.",
+    criteriaResults: [
+      cr("r2-c1", "met", "CMTO registration verified."),
+      cr("r2-c2", "partial", "Weekend availability, limited evenings."),
+      cr("r2-c3", "met", "Deep tissue specialist."),
+    ],
+    documents: [{ name: "Resume / CV", type: "resume", fileName: "aisha-khan-cv.pdf" }],
+    humanDecision: "advance",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-06-25",
+    invited: true,
+    invitedDate: "2026-06-26",
+  },
+  {
+    id: "a8",
+    name: "Emily Watson",
+    email: "emily.watson@example.com",
+    phone: "(613) 555-0144",
+    roleId: "r3",
+    submittedDate: "2026-06-26",
+    aiScore: 76,
+    aiDecision: "advanced",
+    reasoning:
+      "Three years of experience with Jane scheduling software, meeting the required EMR criterion. Four years in a patient-facing reception role. No French proficiency noted, a nice-to-have.",
+    criteriaResults: [
+      cr("r3-c1", "met", "3 years with Jane software."),
+      cr("r3-c2", "met", "4 years patient-facing reception."),
+      cr("r3-c3", "not-met", "No French proficiency noted."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "emily-watson-resume.pdf" },
+      { name: "Cover letter", type: "cover-letter", fileName: "emily-watson-cover.pdf" },
+    ],
+    humanDecision: null,
+  },
+  {
+    id: "a9",
+    name: "Robert Singh",
+    email: "robert.singh@example.com",
+    phone: "(905) 555-0133",
+    roleId: "r3",
+    submittedDate: "2026-06-23",
+    aiScore: 58,
+    aiDecision: "rejected",
+    reasoning:
+      "No experience with clinic scheduling or EMR software was found, a required criterion. Has general administrative experience but not in a healthcare setting.",
+    criteriaResults: [
+      cr("r3-c1", "not-met", "No scheduling/EMR software experience."),
+      cr("r3-c2", "partial", "Administrative, not patient-facing."),
+      cr("r3-c3", "met", "Fluent in French."),
+    ],
+    documents: [{ name: "Resume / CV", type: "resume", fileName: "robert-singh-cv.pdf" }],
+    humanDecision: "reject",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-06-24",
+  },
+  {
+    id: "a10",
+    name: "Linda Park",
+    email: "linda.park@example.com",
+    phone: "(416) 555-0111",
+    roleId: "r4",
+    submittedDate: "2026-04-15",
+    aiScore: 88,
+    aiDecision: "advanced",
+    reasoning:
+      "Registered with the College of Occupational Therapists of Ontario. Extensive experience conducting home safety assessments, satisfying the preferred criterion.",
+    criteriaResults: [
+      cr("r4-c1", "met", "COTO registration verified."),
+      cr("r4-c2", "met", "Extensive home assessment experience."),
+    ],
+    documents: [
+      { name: "Resume / CV", type: "resume", fileName: "linda-park-cv.pdf" },
+      { name: "Cover letter", type: "cover-letter", fileName: "linda-park-cover.pdf" },
+    ],
+    humanDecision: "advance",
+    decidedBy: "Jordan Avery",
+    decidedDate: "2026-04-18",
+    invited: true,
+    invitedDate: "2026-04-19",
+  },
+];
+
+const templates: EmailTemplate[] = [
+  {
+    id: "t1",
+    name: "Interview invite — physiotherapist",
+    usedFor: "Interview invite",
+    subject: "Interview invitation for the {{role_title}} role at {{clinic_name}}",
+    body: "Hi {{applicant_name}},\n\nThank you for applying for the {{role_title}} position at {{clinic_name}}. We were impressed by your application and would like to invite you to an interview.\n\nPlease use the link below to choose a time that works for you:\n{{interview_scheduling_link}}\n\nWe look forward to speaking with you.\n\nWarm regards,\nThe {{clinic_name}} hiring team",
+    lastEdited: "2026-06-12",
+  },
+  {
+    id: "t2",
+    name: "General interview invite",
+    usedFor: "Interview invite",
+    subject: "You're invited to interview at {{clinic_name}}",
+    body: "Hi {{applicant_name}},\n\nWe've reviewed your application for the {{role_title}} role and would love to learn more about you. Please book an interview slot here:\n{{interview_scheduling_link}}\n\nThank you,\n{{clinic_name}}",
+    lastEdited: "2026-06-05",
+  },
+];
+
+let state: AppState = {
+  currentUser: "Jordan Avery",
+  clinicName: "Riverside Clinic Group",
+  roles,
+  applicants,
+  templates,
+};
+
+const listeners = new Set<() => void>();
+
+function emit() {
+  state = { ...state };
+  listeners.forEach((l) => l());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot() {
+  return state;
+}
+
+export function useAppState(): AppState {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+function uid(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/* ---------------- Actions ---------------- */
+
+export const actions = {
+  upsertRole(role: Omit<Role, "id" | "createdDate"> & { id?: string; createdDate?: string }): string {
+    if (role.id) {
+      const id = role.id;
+      state.roles = state.roles.map((r) =>
+        r.id === id ? { ...r, ...role, id, createdDate: r.createdDate } : r,
+      );
+      emit();
+      return id;
+    }
+    const id = uid("r");
+    const newRole: Role = {
+      id,
+      title: role.title,
+      department: role.department,
+      status: role.status,
+      criteria: role.criteria as Criterion[],
+      createdDate: todayISO(),
+    };
+    state.roles = [newRole, ...state.roles];
+    emit();
+    return id;
+  },
+
+  setRoleStatus(roleId: string, status: Role["status"]) {
+    state.roles = state.roles.map((r) => (r.id === roleId ? { ...r, status } : r));
+    emit();
+  },
+
+  addApplicant(input: {
+    name: string;
+    email: string;
+    phone?: string;
+    roleId: string;
+    documents: Applicant["documents"];
+  }): string {
+    const role = state.roles.find((r) => r.id === input.roleId);
+    const id = uid("a");
+    // Simulated AI screening result.
+    const score = 60 + Math.floor(Math.random() * 38);
+    const aiDecision = score >= 70 ? "advanced" : "rejected";
+    const criteriaResults =
+      role?.criteria.map((c, i) => ({
+        criterionId: c.id,
+        match: (score >= 70 ? (i % 4 === 3 ? "partial" : "met") : i % 2 === 0 ? "not-met" : "met") as
+          | "met"
+          | "not-met"
+          | "partial",
+        note: "Assessed from submitted documents.",
+      })) ?? [];
+    const newApplicant: Applicant = {
+      id,
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      roleId: input.roleId,
+      submittedDate: todayISO(),
+      aiScore: score,
+      aiDecision,
+      reasoning:
+        aiDecision === "advanced"
+          ? "The applicant meets the required criteria for this role based on the submitted documents, with a strong overall match to the screening profile."
+          : "The applicant does not currently meet one or more required criteria for this role based on the submitted documents.",
+      criteriaResults,
+      documents: input.documents,
+      humanDecision: null,
+    };
+    state.applicants = [newApplicant, ...state.applicants];
+    emit();
+    return id;
+  },
+
+  saveDecision(applicantId: string, decision: HumanDecision, overrideReason: string, user: string) {
+    state.applicants = state.applicants.map((a) =>
+      a.id === applicantId
+        ? {
+            ...a,
+            humanDecision: decision,
+            overrideReason: overrideReason || undefined,
+            decidedBy: user,
+            decidedDate: todayISO(),
+          }
+        : a,
+    );
+    emit();
+  },
+
+  clearDecision(applicantId: string) {
+    state.applicants = state.applicants.map((a) =>
+      a.id === applicantId
+        ? {
+            ...a,
+            humanDecision: null,
+            overrideReason: undefined,
+            decidedBy: undefined,
+            decidedDate: undefined,
+          }
+        : a,
+    );
+    emit();
+  },
+
+  sendInvites(applicantIds: string[]) {
+    const date = todayISO();
+    state.applicants = state.applicants.map((a) =>
+      applicantIds.includes(a.id) ? { ...a, invited: true, invitedDate: date } : a,
+    );
+    emit();
+  },
+
+  upsertTemplate(
+    tpl: Omit<EmailTemplate, "id" | "lastEdited"> & { id?: string },
+  ): string {
+    if (tpl.id) {
+      const id = tpl.id;
+      state.templates = state.templates.map((t) =>
+        t.id === id ? { ...t, ...tpl, id, lastEdited: todayISO() } : t,
+      );
+      emit();
+      return id;
+    }
+    const id = uid("t");
+    state.templates = [
+      { id, lastEdited: todayISO(), ...tpl } as EmailTemplate,
+      ...state.templates,
+    ];
+    emit();
+    return id;
+  },
+
+  setClinicName(name: string) {
+    state.clinicName = name;
+    emit();
+  },
+};
