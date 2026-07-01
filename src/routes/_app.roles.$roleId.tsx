@@ -24,6 +24,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { RoleFormDialog } from "@/components/role-form-dialog";
 import { UploadApplicantDialog } from "@/components/upload-applicant-dialog";
 import { BulkImportDialog } from "@/components/bulk-import-dialog";
@@ -122,36 +127,33 @@ function RoleDetailPage() {
         action={
           <>
             {role.status === "open" && (
-              <Button variant="outline" onClick={() => setCloseOpen(true)}>
-                Close role
+              <Button variant="outline" onClick={copyApplyLink}>
+                <Copy className="h-4 w-4" /> Copy application link
               </Button>
             )}
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" /> Edit role
             </Button>
+            {role.status === "open" && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setCloseOpen(true)}
+              >
+                Close role
+              </Button>
+            )}
           </>
         }
       />
       <PageBody className="space-y-6">
-        {/* Public application link */}
-        {role.status === "open" && (
-          <section className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold text-foreground">Public application link</h2>
-              <p className="mt-1 truncate font-mono text-xs text-muted-foreground" title={applyUrl}>
-                {applyUrl}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={copyApplyLink}>
-              <Copy className="h-4 w-4" /> Copy application link
-            </Button>
-          </section>
-        )}
-
         {/* Criteria */}
-        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Screening criteria</h2>
-          <div className="space-y-2.5">
+        <Collapsible className="rounded-lg border border-border bg-card shadow-sm">
+          <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 p-5 text-left [&[data-state=open]>svg]:rotate-180">
+            <h2 className="text-sm font-semibold text-foreground">Screening criteria</h2>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform" />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2.5 px-5 pb-5">
             {role.criteria.map((c) => (
               <div key={c.id} className="flex flex-wrap items-start gap-2">
                 <StatusBadge tone={weightTone[c.weight]}>{weightLabel[c.weight]}</StatusBadge>
@@ -163,8 +165,8 @@ function RoleDetailPage() {
                 </div>
               </div>
             ))}
-          </div>
-        </section>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Applicants */}
         <section className="space-y-4">

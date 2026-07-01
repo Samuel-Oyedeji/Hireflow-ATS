@@ -85,7 +85,7 @@ export function InterviewSection({
     setAnalyzing(true);
     // Simulated analysis latency, matching the screening flow.
     setTimeout(() => {
-      actions.analyzeTranscript(applicant.id, fileName, currentUser);
+      actions.analyzeTranscript(applicant.id, { fileName }, currentUser);
       setAnalyzing(false);
       setFileName(undefined);
     }, 1600);

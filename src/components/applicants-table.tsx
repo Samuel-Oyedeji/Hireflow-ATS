@@ -1,9 +1,17 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import type { Applicant, Role } from "@/lib/types";
-import { formatDate, humanStatus, humanStatusLabel, roleById } from "@/lib/hireflow";
+import {
+  formatDate,
+  humanStatus,
+  humanStatusLabel,
+  lifecycleStage,
+  roleById,
+} from "@/lib/hireflow";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, Dot, aiDecisionTone } from "@/components/status-badge";
+import { MarkInterviewedDialog } from "@/components/mark-interviewed-dialog";
 
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
@@ -30,6 +38,7 @@ export function ApplicantsTable({
   roles: Role[];
   showRole?: boolean;
 }) {
+  const [interviewFor, setInterviewFor] = useState<Applicant | null>(null);
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
       <div className="overflow-x-auto">
@@ -76,7 +85,7 @@ export function ApplicantsTable({
                     </StatusBadge>
                   </Td>
                   <Td>
-                    <div className="flex flex-col items-start gap-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge tone={humanTone(a)}>{humanStatusLabel(a)}</StatusBadge>
                       {a.invited && (
                         <span className="text-xs font-medium text-success">Invited</span>
@@ -84,11 +93,18 @@ export function ApplicantsTable({
                     </div>
                   </Td>
                   <Td className="text-right">
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/applicants/$applicantId" params={{ applicantId: a.id }}>
-                        Review
-                      </Link>
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      {lifecycleStage(a) === "invited" && (
+                        <Button variant="outline" size="sm" onClick={() => setInterviewFor(a)}>
+                          Mark interviewed
+                        </Button>
+                      )}
+                      <Button asChild variant="outline" size="sm">
+                        <Link to="/applicants/$applicantId" params={{ applicantId: a.id }}>
+                          Review
+                        </Link>
+                      </Button>
+                    </div>
                   </Td>
                 </tr>
               );
@@ -96,6 +112,13 @@ export function ApplicantsTable({
           </tbody>
         </table>
       </div>
+      {interviewFor && (
+        <MarkInterviewedDialog
+          applicant={interviewFor}
+          open={interviewFor !== null}
+          onOpenChange={(v) => !v && setInterviewFor(null)}
+        />
+      )}
     </div>
   );
 }

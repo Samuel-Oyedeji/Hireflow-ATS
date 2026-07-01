@@ -442,9 +442,15 @@ function simulateTranscriptAnalysis(
   role: Role | undefined,
   transcriptUploadId: string,
   fileName: string,
+  text?: string,
 ): TranscriptAnalysis {
+  // Usability is judged from the pasted transcript text when provided, otherwise
+  // from the uploaded file name (the file's contents aren't available in this demo).
   const base = fileName.replace(/\.[^.]+$/, "").trim().toLowerCase();
-  const unusable = base.length < 3 || /(empty|blank|invalid|untitled)/.test(base);
+  const unusable =
+    text !== undefined
+      ? text.trim().length < 20
+      : base.length < 3 || /(empty|blank|invalid|untitled)/.test(base);
   if (unusable) {
     return {
       id: uid("ta"),
@@ -459,7 +465,7 @@ function simulateTranscriptAnalysis(
       createdAt: todayISO(),
       errorFlag: true,
       errorReason:
-        "This file doesn't look like a usable interview transcript. Please upload the full transcript and try again.",
+        "This doesn't look like a usable interview transcript. Please provide the full transcript and try again.",
     };
   }
 
@@ -634,21 +640,32 @@ export const actions = {
     return id;
   },
 
-  analyzeTranscript(applicantId: string, fileName: string, user: string) {
+  analyzeTranscript(
+    applicantId: string,
+    input: { fileName: string; text?: string },
+    user: string,
+  ): TranscriptAnalysis | undefined {
     const applicant = state.applicants.find((a) => a.id === applicantId);
     if (!applicant) return;
     const role = state.roles.find((r) => r.id === applicant.roleId);
     const transcript: TranscriptUpload = {
       id: uid("tr"),
-      fileName,
+      fileName: input.fileName,
       uploadedAt: todayISO(),
       uploadedBy: user,
     };
-    const analysis = simulateTranscriptAnalysis(applicant, role, transcript.id, fileName);
+    const analysis = simulateTranscriptAnalysis(
+      applicant,
+      role,
+      transcript.id,
+      input.fileName,
+      input.text,
+    );
     state.applicants = state.applicants.map((a) =>
       a.id === applicantId ? { ...a, transcript, transcriptAnalysis: analysis } : a,
     );
     emit();
+    return analysis;
   },
 
   saveFinalDecision(
