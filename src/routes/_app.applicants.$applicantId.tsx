@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { StatusBadge, aiDecisionTone, type Tone } from "@/components/status-badge";
 import { ScoreRing } from "@/components/score-ring";
+import { InterviewSection } from "@/components/interview-section";
 import {
   Accordion,
   AccordionContent,
@@ -244,6 +245,11 @@ function ApplicantReviewPage() {
             ))}
           </Accordion>
         </section>
+
+        {/* Interview stage — appears once the applicant has been invited */}
+        {applicant.invited && (
+          <InterviewSection applicant={applicant} role={role} currentUser={currentUser} />
+        )}
 
         {/* Human decision */}
         {showForm && (

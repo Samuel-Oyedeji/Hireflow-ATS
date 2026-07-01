@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { FileText, Loader2, Upload, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FileDropField } from "@/components/file-drop-field";
 import { actions, useAppState } from "@/lib/store";
 import type { ApplicantDocument } from "@/lib/types";
 
@@ -30,78 +31,6 @@ const slots: Slot[] = [
   { type: "cover-letter", label: "Cover letter", optional: true },
   { type: "other", label: "Other supporting document", optional: true },
 ];
-
-function FileSlot({
-  slot,
-  fileName,
-  onPick,
-  onClear,
-}: {
-  slot: Slot;
-  fileName?: string;
-  onPick: (name: string) => void;
-  onClear: () => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [drag, setDrag] = useState(false);
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="flex items-center gap-2">
-        {slot.label}
-        {slot.optional && <span className="text-xs font-normal text-muted-foreground">(optional)</span>}
-      </Label>
-      {fileName ? (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-secondary/40 px-3 py-2.5">
-          <FileText className="h-4 w-4 text-primary" />
-          <span className="flex-1 truncate text-sm text-foreground">{fileName}</span>
-          <button
-            type="button"
-            aria-label="Remove file"
-            onClick={onClear}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            const f = e.dataTransfer.files?.[0];
-            if (f) onPick(f.name);
-          }}
-          className={`flex w-full items-center justify-center gap-2 rounded-md border border-dashed px-3 py-4 text-sm transition-colors ${
-            drag ? "border-primary bg-accent" : "border-border bg-card hover:bg-secondary/50"
-          }`}
-        >
-          <Upload className="h-4 w-4 text-muted-foreground" />
-          <span className="text-muted-foreground">
-            Drag & drop or <span className="text-primary">browse</span> · PDF, DOCX
-          </span>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.doc,.docx"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onPick(f.name);
-            }}
-          />
-        </button>
-      )}
-    </div>
-  );
-}
 
 export function UploadApplicantDialog({
   open,
@@ -153,6 +82,7 @@ export function UploadApplicantDialog({
         phone: phone.trim() || undefined,
         roleId,
         documents,
+        source: "manual_upload",
       });
       setScreening(false);
       onOpenChange(false);
@@ -206,9 +136,10 @@ export function UploadApplicantDialog({
 
           <div className="space-y-3 pt-1">
             {slots.map((s) => (
-              <FileSlot
+              <FileDropField
                 key={s.type}
-                slot={s}
+                label={s.label}
+                optional={s.optional}
                 fileName={files[s.type]}
                 onPick={(n) => setFiles((prev) => ({ ...prev, [s.type]: n }))}
                 onClear={() =>

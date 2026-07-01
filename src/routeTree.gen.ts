@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexOldRouteImport } from './routes/index-old'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApplyRoleIdRouteImport } from './routes/apply.$roleId'
 import { Route as AppTemplatesRouteImport } from './routes/_app.templates'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppDashboardOldRouteImport } from './routes/_app.dashboard-old'
@@ -33,6 +34,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApplyRoleIdRoute = ApplyRoleIdRouteImport.update({
+  id: '/apply/$roleId',
+  path: '/apply/$roleId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppTemplatesRoute = AppTemplatesRouteImport.update({
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/dashboard-old': typeof AppDashboardOldRoute
   '/settings': typeof AppSettingsRoute
   '/templates': typeof AppTemplatesRoute
+  '/apply/$roleId': typeof ApplyRoleIdRoute
   '/applicants/$applicantId': typeof AppApplicantsApplicantIdRoute
   '/roles/$roleId': typeof AppRolesRoleIdRoute
   '/applicants/': typeof AppApplicantsIndexRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/dashboard-old': typeof AppDashboardOldRoute
   '/settings': typeof AppSettingsRoute
   '/templates': typeof AppTemplatesRoute
+  '/apply/$roleId': typeof ApplyRoleIdRoute
   '/applicants/$applicantId': typeof AppApplicantsApplicantIdRoute
   '/roles/$roleId': typeof AppRolesRoleIdRoute
   '/applicants': typeof AppApplicantsIndexRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/_app/dashboard-old': typeof AppDashboardOldRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/templates': typeof AppTemplatesRoute
+  '/apply/$roleId': typeof ApplyRoleIdRoute
   '/_app/applicants/$applicantId': typeof AppApplicantsApplicantIdRoute
   '/_app/roles/$roleId': typeof AppRolesRoleIdRoute
   '/_app/applicants/': typeof AppApplicantsIndexRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/dashboard-old'
     | '/settings'
     | '/templates'
+    | '/apply/$roleId'
     | '/applicants/$applicantId'
     | '/roles/$roleId'
     | '/applicants/'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/dashboard-old'
     | '/settings'
     | '/templates'
+    | '/apply/$roleId'
     | '/applicants/$applicantId'
     | '/roles/$roleId'
     | '/applicants'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard-old'
     | '/_app/settings'
     | '/_app/templates'
+    | '/apply/$roleId'
     | '/_app/applicants/$applicantId'
     | '/_app/roles/$roleId'
     | '/_app/applicants/'
@@ -159,6 +171,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   IndexOldRoute: typeof IndexOldRoute
+  ApplyRoleIdRoute: typeof ApplyRoleIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -182,6 +195,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/apply/$roleId': {
+      id: '/apply/$roleId'
+      path: '/apply/$roleId'
+      fullPath: '/apply/$roleId'
+      preLoaderRoute: typeof ApplyRoleIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/templates': {
@@ -271,6 +291,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   IndexOldRoute: IndexOldRoute,
+  ApplyRoleIdRoute: ApplyRoleIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

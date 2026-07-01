@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { ArrowLeft, Pencil, Plus, Send, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ChevronDown, Copy, Pencil, Plus, Send, Users } from "lucide-react";
 
 import { PageHeader, PageBody } from "@/components/page-header";
 import { ApplicantsTable } from "@/components/applicants-table";
@@ -18,8 +18,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { RoleFormDialog } from "@/components/role-form-dialog";
 import { UploadApplicantDialog } from "@/components/upload-applicant-dialog";
+import { BulkImportDialog } from "@/components/bulk-import-dialog";
 import { SendInvitesDialog } from "@/components/send-invites-dialog";
 import { actions, useAppState } from "@/lib/store";
 import {
@@ -47,7 +54,12 @@ function RoleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [invitesOpen, setInvitesOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [origin, setOrigin] = useState("");
+
+  // Public apply URL is client-only; resolve the origin after mount.
+  useEffect(() => setOrigin(window.location.origin), []);
 
   if (!role) {
     return (
@@ -72,6 +84,14 @@ function RoleDetailPage() {
   const roleApplicants = applicantsForRole(applicants, role.id);
   const counts = roleCounts(applicants, role.id);
   const eligible = inviteEligible(applicants, role.id);
+  const applyUrl = `${origin}/apply/${role.id}`;
+
+  function copyApplyLink() {
+    navigator.clipboard
+      .writeText(applyUrl)
+      .then(() => toast.success("Link copied"))
+      .catch(() => toast.error("Couldn't copy the link."));
+  }
 
   const filtered = roleApplicants.filter((a) => {
     if (tab === "all") return true;
@@ -113,6 +133,21 @@ function RoleDetailPage() {
         }
       />
       <PageBody className="space-y-6">
+        {/* Public application link */}
+        {role.status === "open" && (
+          <section className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4 shadow-sm">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold text-foreground">Public application link</h2>
+              <p className="mt-1 truncate font-mono text-xs text-muted-foreground" title={applyUrl}>
+                {applyUrl}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={copyApplyLink}>
+              <Copy className="h-4 w-4" /> Copy application link
+            </Button>
+          </section>
+        )}
+
         {/* Criteria */}
         <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Screening criteria</h2>
@@ -148,9 +183,22 @@ function RoleDetailPage() {
               >
                 <Send className="h-4 w-4" /> Finalize & send invites
               </Button>
-              <Button onClick={() => setUploadOpen(true)}>
-                <Plus className="h-4 w-4" /> Upload applicant
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4" /> Upload applicant
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setUploadOpen(true)}>
+                    Add single applicant
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setBulkOpen(true)}>
+                    Bulk import
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -188,6 +236,7 @@ function RoleDetailPage() {
         onOpenChange={setUploadOpen}
         defaultRoleId={role.id}
       />
+      <BulkImportDialog open={bulkOpen} onOpenChange={setBulkOpen} roleId={role.id} />
       <SendInvitesDialog
         open={invitesOpen}
         onOpenChange={setInvitesOpen}

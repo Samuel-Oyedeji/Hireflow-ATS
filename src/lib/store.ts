@@ -2,10 +2,19 @@ import { useSyncExternalStore } from "react";
 import type {
   AppState,
   Applicant,
+  Assessment,
+  BulkImport,
+  Confidence,
   Criterion,
+  CriteriaUpdate,
+  CriterionMatch,
   EmailTemplate,
+  FinalDecision,
   HumanDecision,
   Role,
+  TranscriptAnalysis,
+  TranscriptSuggestion,
+  TranscriptUpload,
 } from "./types";
 
 function cr(criterionId: string, match: "met" | "not-met" | "partial", note: string) {
@@ -385,6 +394,7 @@ let state: AppState = {
   roles,
   applicants,
   templates,
+  bulkImports: [],
 };
 
 const listeners = new Set<() => void>();
@@ -413,6 +423,119 @@ function uid(prefix: string) {
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+const matchToAssessment: Record<CriterionMatch, Assessment> = {
+  met: "met",
+  "not-met": "not_met",
+  partial: "unclear",
+};
+
+/**
+ * Simulated interview-transcript analysis. Mirrors the mock AI screening: it is
+ * deterministic given the applicant's screening result and the role criteria, so
+ * demos are stable. An obviously-unusable file (very short / "empty"/"blank" name)
+ * returns an error flag instead of a low-confidence guess, per the spec.
+ */
+function simulateTranscriptAnalysis(
+  applicant: Applicant,
+  role: Role | undefined,
+  transcriptUploadId: string,
+  fileName: string,
+): TranscriptAnalysis {
+  const base = fileName.replace(/\.[^.]+$/, "").trim().toLowerCase();
+  const unusable = base.length < 3 || /(empty|blank|invalid|untitled)/.test(base);
+  if (unusable) {
+    return {
+      id: uid("ta"),
+      transcriptUploadId,
+      overallSuggestion: "further_review",
+      confidence: "low",
+      summary: "",
+      strengths: [],
+      concerns: [],
+      criteriaUpdate: [],
+      suggestedNextStep: "",
+      createdAt: todayISO(),
+      errorFlag: true,
+      errorReason:
+        "This file doesn't look like a usable interview transcript. Please upload the full transcript and try again.",
+    };
+  }
+
+  const score = applicant.aiScore;
+  const overallSuggestion: TranscriptSuggestion =
+    score >= 75 ? "hire" : score >= 60 ? "further_review" : "reject";
+  const dist = Math.abs(score - 67);
+  const confidence: Confidence = dist >= 15 ? "high" : dist >= 7 ? "medium" : "low";
+  const critLabel = (id: string) => role?.criteria.find((c) => c.id === id)?.label;
+
+  const criteriaUpdate: CriteriaUpdate[] = applicant.criteriaResults.map((res) => {
+    const original = matchToAssessment[res.match];
+    // The interview tends to resolve anything the resume left unclear.
+    const updated: Assessment = original === "unclear" ? (score >= 65 ? "met" : "not_met") : original;
+    const note =
+      updated !== original
+        ? `Unclear from the resume — the interview ${updated === "met" ? "confirmed this is met" : "showed this is not met"}.`
+        : original === "met"
+          ? "Consistent with the resume and reinforced in the interview."
+          : original === "not_met"
+            ? "Remains a gap after the interview."
+            : "Still unclear after the interview.";
+    return {
+      criterionId: res.criterionId,
+      originalAssessment: original,
+      updatedAssessment: updated,
+      note,
+    };
+  });
+
+  const metLabels = criteriaUpdate
+    .filter((c) => c.updatedAssessment === "met")
+    .map((c) => critLabel(c.criterionId))
+    .filter((l): l is string => !!l);
+  const gapLabels = criteriaUpdate
+    .filter((c) => c.updatedAssessment === "not_met")
+    .map((c) => critLabel(c.criterionId))
+    .filter((l): l is string => !!l);
+
+  const strengths = metLabels.slice(0, 3).map((l) => `Demonstrated ${l.toLowerCase()} during the interview.`);
+  if (strengths.length === 0) {
+    strengths.push("Communicated clearly and engaged well with the interview questions.");
+  }
+  const concerns = gapLabels.slice(0, 3).map((l) => `Did not fully demonstrate ${l.toLowerCase()}.`);
+  if (concerns.length === 0 && overallSuggestion !== "hire") {
+    concerns.push("Some responses lacked depth relevant to the role.");
+  }
+
+  const roleName = role?.title ?? "the role";
+  const summary =
+    overallSuggestion === "hire"
+      ? `The candidate interviewed strongly for ${roleName}, backing up the resume screening with concrete examples well aligned to the role's criteria.`
+      : overallSuggestion === "further_review"
+        ? `The candidate showed promise for ${roleName} but left some criteria only partly addressed. A closer look is warranted before deciding.`
+        : `The interview surfaced gaps against ${roleName}'s required criteria that the resume alone did not resolve.`;
+
+  const suggestedNextStep =
+    overallSuggestion === "hire"
+      ? "Proceed to offer."
+      : overallSuggestion === "further_review"
+        ? `Request a second interview to probe ${(gapLabels[0] ?? "the remaining criteria").toLowerCase()} further.`
+        : "Do not proceed; send a considerate rejection and keep the résumé on file.";
+
+  return {
+    id: uid("ta"),
+    transcriptUploadId,
+    overallSuggestion,
+    confidence,
+    summary,
+    strengths,
+    concerns,
+    criteriaUpdate,
+    suggestedNextStep,
+    createdAt: todayISO(),
+    errorFlag: false,
+  };
 }
 
 /* ---------------- Actions ---------------- */
@@ -452,6 +575,9 @@ export const actions = {
     phone?: string;
     roleId: string;
     documents: Applicant["documents"];
+    source?: Applicant["source"];
+    notes?: string;
+    bulkImportId?: string;
   }): string {
     const role = state.roles.find((r) => r.id === input.roleId);
     const id = uid("a");
@@ -473,6 +599,9 @@ export const actions = {
       email: input.email,
       phone: input.phone,
       roleId: input.roleId,
+      source: input.source ?? "manual_upload",
+      notes: input.notes,
+      bulkImportId: input.bulkImportId,
       submittedDate: todayISO(),
       aiScore: score,
       aiDecision,
@@ -487,6 +616,63 @@ export const actions = {
     state.applicants = [newApplicant, ...state.applicants];
     emit();
     return id;
+  },
+
+  createBulkImport(input: {
+    roleId: string;
+    fileName: string;
+    importedBy: string;
+    totalFiles: number;
+    successful: number;
+    failed: number;
+    skipped: number;
+  }): string {
+    const id = uid("bulk");
+    const record: BulkImport = { id, createdAt: todayISO(), ...input };
+    state.bulkImports = [record, ...state.bulkImports];
+    emit();
+    return id;
+  },
+
+  analyzeTranscript(applicantId: string, fileName: string, user: string) {
+    const applicant = state.applicants.find((a) => a.id === applicantId);
+    if (!applicant) return;
+    const role = state.roles.find((r) => r.id === applicant.roleId);
+    const transcript: TranscriptUpload = {
+      id: uid("tr"),
+      fileName,
+      uploadedAt: todayISO(),
+      uploadedBy: user,
+    };
+    const analysis = simulateTranscriptAnalysis(applicant, role, transcript.id, fileName);
+    state.applicants = state.applicants.map((a) =>
+      a.id === applicantId ? { ...a, transcript, transcriptAnalysis: analysis } : a,
+    );
+    emit();
+  },
+
+  saveFinalDecision(
+    applicantId: string,
+    decision: TranscriptSuggestion,
+    overrideReason: string,
+    user: string,
+  ) {
+    state.applicants = state.applicants.map((a) => {
+      if (a.id !== applicantId) return a;
+      const suggestion = a.transcriptAnalysis?.overallSuggestion;
+      const isOverride = suggestion !== undefined && decision !== suggestion;
+      const finalDecision: FinalDecision = {
+        id: uid("fd"),
+        transcriptAnalysisId: a.transcriptAnalysis?.id,
+        decision,
+        isOverride,
+        overrideReason: isOverride && overrideReason ? overrideReason : undefined,
+        decidedBy: user,
+        createdAt: todayISO(),
+      };
+      return { ...a, finalDecision };
+    });
+    emit();
   },
 
   saveDecision(applicantId: string, decision: HumanDecision, overrideReason: string, user: string) {

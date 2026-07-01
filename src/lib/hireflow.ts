@@ -15,6 +15,32 @@ export function workingStatus(a: Applicant): WorkingStatus {
   return a.humanDecision === "advance" ? "advanced" : "rejected";
 }
 
+export type LifecycleStage =
+  | "uploaded"
+  | "screened"
+  | "reviewed"
+  | "invited"
+  | "interviewed"
+  | "decided";
+
+/** Derives the applicant's lifecycle stage from existing fields (not stored). */
+export function lifecycleStage(a: Applicant): LifecycleStage {
+  if (a.finalDecision) return "decided";
+  if (a.transcriptAnalysis && !a.transcriptAnalysis.errorFlag) return "interviewed";
+  if (a.invited) return "invited";
+  if (a.humanDecision !== null) return "reviewed";
+  return "screened"; // every applicant is screened on creation in this demo
+}
+
+export const lifecycleStageLabel: Record<LifecycleStage, string> = {
+  uploaded: "Uploaded",
+  screened: "Screened",
+  reviewed: "Reviewed",
+  invited: "Invited",
+  interviewed: "Interviewed",
+  decided: "Decided",
+};
+
 export type HumanStatus = "awaiting" | "confirmed" | "overridden";
 
 export function humanStatus(a: Applicant): HumanStatus {
