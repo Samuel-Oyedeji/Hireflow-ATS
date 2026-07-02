@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type {
+  AiDecision,
   AppState,
   Applicant,
   Assessment,
@@ -8,6 +9,7 @@ import type {
   Criterion,
   CriteriaUpdate,
   CriterionMatch,
+  CriterionResult,
   EmailTemplate,
   FinalDecision,
   HumanDecision,
@@ -544,6 +546,39 @@ function simulateTranscriptAnalysis(
   };
 }
 
+/**
+ * Simulated AI screening result. Used both when an applicant is first uploaded
+ * and when documents are added later and the screening is re-run. Mirrors the
+ * mock elsewhere in this file — score is random within a band, and the per-criterion
+ * matches follow a fixed pattern off that score so the UI always has something to show.
+ */
+function simulateScreening(role: Role | undefined): {
+  aiScore: number;
+  aiDecision: AiDecision;
+  reasoning: string;
+  criteriaResults: CriterionResult[];
+} {
+  const score = 60 + Math.floor(Math.random() * 38);
+  const aiDecision: AiDecision = score >= 70 ? "advanced" : "rejected";
+  const criteriaResults: CriterionResult[] =
+    role?.criteria.map((c, i) => ({
+      criterionId: c.id,
+      match: (score >= 70
+        ? i % 4 === 3
+          ? "partial"
+          : "met"
+        : i % 2 === 0
+          ? "not-met"
+          : "met") as CriterionMatch,
+      note: "Assessed from submitted documents.",
+    })) ?? [];
+  const reasoning =
+    aiDecision === "advanced"
+      ? "The applicant meets the required criteria for this role based on the submitted documents, with a strong overall match to the screening profile."
+      : "The applicant does not currently meet one or more required criteria for this role based on the submitted documents.";
+  return { aiScore: score, aiDecision, reasoning, criteriaResults };
+}
+
 /* ---------------- Actions ---------------- */
 
 export const actions = {
@@ -587,18 +622,6 @@ export const actions = {
   }): string {
     const role = state.roles.find((r) => r.id === input.roleId);
     const id = uid("a");
-    // Simulated AI screening result.
-    const score = 60 + Math.floor(Math.random() * 38);
-    const aiDecision = score >= 70 ? "advanced" : "rejected";
-    const criteriaResults =
-      role?.criteria.map((c, i) => ({
-        criterionId: c.id,
-        match: (score >= 70 ? (i % 4 === 3 ? "partial" : "met") : i % 2 === 0 ? "not-met" : "met") as
-          | "met"
-          | "not-met"
-          | "partial",
-        note: "Assessed from submitted documents.",
-      })) ?? [];
     const newApplicant: Applicant = {
       id,
       name: input.name,
@@ -609,19 +632,31 @@ export const actions = {
       notes: input.notes,
       bulkImportId: input.bulkImportId,
       submittedDate: todayISO(),
-      aiScore: score,
-      aiDecision,
-      reasoning:
-        aiDecision === "advanced"
-          ? "The applicant meets the required criteria for this role based on the submitted documents, with a strong overall match to the screening profile."
-          : "The applicant does not currently meet one or more required criteria for this role based on the submitted documents.",
-      criteriaResults,
+      ...simulateScreening(role),
       documents: input.documents,
       humanDecision: null,
     };
     state.applicants = [newApplicant, ...state.applicants];
     emit();
     return id;
+  },
+
+  /**
+   * Add documents to an existing applicant and re-run AI screening against the
+   * role's criteria using all documents on file. The human decision (if any) is
+   * left untouched — re-screening informs the reviewer, it doesn't override them.
+   */
+  addDocuments(applicantId: string, documents: Applicant["documents"]) {
+    state.applicants = state.applicants.map((a) => {
+      if (a.id !== applicantId) return a;
+      const role = state.roles.find((r) => r.id === a.roleId);
+      return {
+        ...a,
+        documents: [...a.documents, ...documents],
+        ...simulateScreening(role),
+      };
+    });
+    emit();
   },
 
   createBulkImport(input: {

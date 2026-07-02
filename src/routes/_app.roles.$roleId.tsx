@@ -227,7 +227,7 @@ function RoleDetailPage() {
           ) : filtered.length === 0 ? (
             <EmptyState icon={Users} title="No applicants in this view" />
           ) : (
-            <ApplicantsTable applicants={filtered} roles={roles} />
+            <ApplicantsTable applicants={filtered} roles={roles} selectable />
           )}
         </section>
       </PageBody>

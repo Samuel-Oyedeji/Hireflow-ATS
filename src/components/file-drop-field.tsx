@@ -43,13 +43,13 @@ export function FileDropField({
       </Label>
       {fileName ? (
         <div className="flex items-center gap-3 rounded-md border border-border bg-secondary/40 px-3 py-2.5">
-          <FileText className="h-4 w-4 text-primary" />
-          <span className="flex-1 truncate text-sm text-foreground">{fileName}</span>
+          <FileText className="h-4 w-4 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate text-sm text-foreground">{fileName}</span>
           <button
             type="button"
             aria-label="Remove file"
             onClick={onClear}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>

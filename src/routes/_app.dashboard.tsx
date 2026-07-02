@@ -57,6 +57,7 @@ function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
+        wide
         action={
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -77,7 +78,7 @@ function DashboardPage() {
           </DropdownMenu>
         }
       />
-      <PageBody className="space-y-6">
+      <PageBody className="space-y-6" wide>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Open roles" value={openRoles.length} icon={Briefcase} tone="info" />
           <StatCard label="Total applicants" value={applicants.length} icon={Users} tone="info" />
@@ -166,7 +167,7 @@ function DashboardPage() {
                 {invitedFiltered.length === 0 ? (
                   <EmptyState icon={Send} title="No applicants match these filters" />
                 ) : (
-                  <ApplicantsTable applicants={invitedFiltered} roles={roles} showRole />
+                  <ApplicantsTable applicants={invitedFiltered} roles={roles} showRole selectable />
                 )}
               </>
             )}

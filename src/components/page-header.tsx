@@ -6,12 +6,15 @@ export function PageHeader({
   action,
   back,
   className,
+  wide = false,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   action?: React.ReactNode;
   back?: React.ReactNode;
   className?: string;
+  /** Use a wider content max-width, e.g. for data-dense tables. Keep in sync with PageBody. */
+  wide?: boolean;
 }) {
   return (
     <div
@@ -20,7 +23,12 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-8 py-4">
+      <div
+        className={cn(
+          "mx-auto flex flex-wrap items-center justify-between gap-3 px-8 py-4",
+          wide ? "max-w-[96rem]" : "max-w-6xl",
+        )}
+      >
         <div className="min-w-0">
           {back}
           <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
@@ -34,6 +42,19 @@ export function PageHeader({
   );
 }
 
-export function PageBody({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("mx-auto max-w-6xl px-8 py-8", className)}>{children}</div>;
+export function PageBody({
+  children,
+  className,
+  wide = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  /** Use a wider content max-width, e.g. for data-dense tables. Keep in sync with PageHeader. */
+  wide?: boolean;
+}) {
+  return (
+    <div className={cn("mx-auto px-8 py-8", wide ? "max-w-[96rem]" : "max-w-6xl", className)}>
+      {children}
+    </div>
+  );
 }

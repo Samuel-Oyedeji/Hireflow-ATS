@@ -41,8 +41,8 @@ function ApplicantsPage() {
 
   return (
     <>
-      <PageHeader title="Applicants" description="Every applicant across all roles." />
-      <PageBody className="space-y-4">
+      <PageHeader title="Applicants" description="Every applicant across all roles." wide />
+      <PageBody className="space-y-4" wide>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-56 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -88,7 +88,7 @@ function ApplicantsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState icon={Search} title="No applicants match your filters" />
         ) : (
-          <ApplicantsTable applicants={filtered} roles={roles} showRole />
+          <ApplicantsTable applicants={filtered} roles={roles} showRole selectable />
         )}
       </PageBody>
     </>
