@@ -1,35 +1,46 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { FileCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Applicant, Role } from "@/lib/types";
 import {
   formatDate,
-  humanStatus,
-  humanStatusLabel,
+  formatTime,
   lifecycleStage,
   roleById,
+  workingStatus,
 } from "@/lib/hireflow";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { StatusBadge, Dot, aiDecisionTone } from "@/components/status-badge";
+import { StatusBadge, Dot, aiDecisionTone, type Tone } from "@/components/status-badge";
 import { MarkInterviewedDialog } from "@/components/mark-interviewed-dialog";
 import { BulkMarkInterviewedDialog } from "@/components/bulk-mark-interviewed-dialog";
 
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
-    <th className={cn("px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground", className)}>
+    <th
+      className={cn(
+        "px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+        className,
+      )}
+    >
       {children}
     </th>
   );
 }
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn("h-[52px] px-4 align-middle", className)}>{children}</td>;
+  return <td className={cn("h-14 px-5 align-middle", className)}>{children}</td>;
 }
 
-function humanTone(a: Applicant) {
-  const s = humanStatus(a);
-  return s === "awaiting" ? "warning" : s === "confirmed" ? "info" : "neutral";
+// The review status reflects the human's decision only — an override reads the
+// same as any other accept/reject, so there is no separate "overridden" state.
+function reviewTone(a: Applicant): Tone {
+  const s = workingStatus(a);
+  return s === "advanced" ? "success" : s === "rejected" ? "danger" : "warning";
+}
+function reviewLabel(a: Applicant): string {
+  const s = workingStatus(a);
+  return s === "advanced" ? "Accepted" : s === "rejected" ? "Rejected" : "Awaiting review";
 }
 
 export function ApplicantsTable({
@@ -44,6 +55,7 @@ export function ApplicantsTable({
   /** Enables per-row selection and the bulk "mark interviewed" action. */
   selectable?: boolean;
 }) {
+  const navigate = useNavigate();
   const [interviewFor, setInterviewFor] = useState<Applicant | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -79,8 +91,8 @@ export function ApplicantsTable({
   return (
     <div className="space-y-3">
       {selectable && selectedApplicants.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/40 px-4 py-2.5">
-          <span className="text-sm font-medium text-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-accent/70 px-4 py-2.5 shadow-[var(--shadow-sm)]">
+          <span className="text-sm font-medium text-accent-foreground">
             {selectedApplicants.length} selected
           </span>
           <div className="flex items-center gap-2">
@@ -94,13 +106,13 @@ export function ApplicantsTable({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-secondary/40">
-              <tr className="border-b border-border text-left">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
+        <div className="overflow-hidden">
+          <table className="w-full table-fixed text-sm">
+            <thead className="border-b border-border bg-[var(--surface-muted)]">
+              <tr className="text-left">
                 {selectable && (
-                  <th className="w-10 py-3 pl-4 pr-0 align-middle">
+                  <th className="w-10 py-3 pl-5 pr-0 align-middle">
                     <Checkbox
                       aria-label="Select all invited applicants"
                       disabled={eligibleIds.length === 0}
@@ -109,13 +121,12 @@ export function ApplicantsTable({
                     />
                   </th>
                 )}
-                <Th>Name</Th>
-                {showRole && <Th>Role</Th>}
-                <Th>Submitted</Th>
-                <Th>Rating</Th>
-                <Th>Recommendation</Th>
-                <Th>Human status</Th>
-                <Th className="text-right" />
+                <Th className="w-[220px]">Name</Th>
+                {showRole && <Th className="w-[250px]">Role</Th>}
+                <Th className="w-[96px]">Rating</Th>
+                <Th className="w-[170px]">Review</Th>
+                <Th className="w-[150px] text-right" />
+                <Th className="w-[120px] text-right">Submitted</Th>
               </tr>
             </thead>
             <tbody>
@@ -125,9 +136,18 @@ export function ApplicantsTable({
                 // A transcript is "submitted" once it has been successfully analysed.
                 const transcriptIn = !!a.transcriptAnalysis && !a.transcriptAnalysis.errorFlag;
                 return (
-                  <tr key={a.id} className="border-b border-border transition-colors last:border-0 hover:bg-secondary/50">
+                  <tr
+                    key={a.id}
+                    onClick={() =>
+                      navigate({ to: "/applicants/$applicantId", params: { applicantId: a.id } })
+                    }
+                    className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/50"
+                  >
                     {selectable && (
-                      <td className="w-10 py-3 pl-4 pr-0 align-middle">
+                      <td
+                        className="w-10 py-3 pl-5 pr-0 align-middle"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {eligible && (
                           <Checkbox
                             aria-label={`Select ${a.name}`}
@@ -141,16 +161,25 @@ export function ApplicantsTable({
                       <Link
                         to="/applicants/$applicantId"
                         params={{ applicantId: a.id }}
-                        className="font-medium text-foreground hover:text-primary"
+                        title={a.name}
+                        className="block truncate font-medium text-foreground hover:text-primary"
                       >
                         {a.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground">{a.email}</div>
+                      <div className="truncate text-xs text-muted-foreground" title={a.email}>
+                        {a.email}
+                      </div>
                     </Td>
                     {showRole && (
-                      <Td className="text-muted-foreground">{role?.title ?? "—"}</Td>
+                      <Td>
+                        <span
+                          className="inline-block max-w-full truncate rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                          title={role?.title ?? undefined}
+                        >
+                          {role?.title ?? "—"}
+                        </span>
+                      </Td>
                     )}
-                    <Td className="text-muted-foreground whitespace-nowrap">{formatDate(a.submittedDate)}</Td>
                     <Td>
                       <span className="inline-flex items-center gap-2 font-medium tabular-nums text-foreground">
                         <Dot tone={aiDecisionTone(a.aiDecision)} />
@@ -158,13 +187,8 @@ export function ApplicantsTable({
                       </span>
                     </Td>
                     <Td>
-                      <StatusBadge tone={aiDecisionTone(a.aiDecision)}>
-                        {a.aiDecision === "advanced" ? "Advanced" : "Rejected"}
-                      </StatusBadge>
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-2 whitespace-nowrap">
-                        <StatusBadge tone={humanTone(a)}>{humanStatusLabel(a)}</StatusBadge>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <StatusBadge tone={reviewTone(a)}>{reviewLabel(a)}</StatusBadge>
                         {transcriptIn ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-teal">
                             <FileCheck className="h-3.5 w-3.5" /> Interviewed
@@ -179,15 +203,25 @@ export function ApplicantsTable({
                     <Td className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         {eligible && (
-                          <Button variant="outline" size="sm" onClick={() => setInterviewFor(a)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInterviewFor(a);
+                            }}
+                          >
                             Mark interviewed
                           </Button>
                         )}
-                        <Button asChild variant="outline" size="sm">
-                          <Link to="/applicants/$applicantId" params={{ applicantId: a.id }}>
-                            Review
-                          </Link>
-                        </Button>
+                      </div>
+                    </Td>
+                    <Td className="text-right whitespace-nowrap">
+                      <div className="text-xs font-medium text-foreground">
+                        {formatDate(a.submittedDate)}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {formatTime(a.submittedDate)}
                       </div>
                     </Td>
                   </tr>

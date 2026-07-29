@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { FileDropField } from "@/components/file-drop-field";
 import { actions, useAppState } from "@/lib/store";
+import { prepareDocument } from "@/lib/uploads";
 import type { ApplicantDocument } from "@/lib/types";
 
 type Slot = { type: ApplicantDocument["type"]; label: string; optional?: boolean };
@@ -49,7 +50,7 @@ export function UploadApplicantDialog({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [roleId, setRoleId] = useState(defaultRoleId ?? "");
-  const [files, setFiles] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
   const [screening, setScreening] = useState(false);
 
   useEffect(() => {
@@ -63,20 +64,21 @@ export function UploadApplicantDialog({
     }
   }, [open, defaultRoleId]);
 
-  function submit() {
+  async function submit() {
     if (!name.trim()) return toast.error("Add the applicant's name.");
     if (!email.trim()) return toast.error("Add the applicant's email.");
     if (!roleId) return toast.error("Select the role being applied for.");
     if (!files.resume) return toast.error("A resume / CV is required.");
 
     setScreening(true);
-    const documents: ApplicantDocument[] = slots
-      .filter((s) => files[s.type])
-      .map((s) => ({ type: s.type, name: s.label, fileName: files[s.type] }));
-
-    // Simulate AI screening latency.
-    setTimeout(() => {
-      const id = actions.addApplicant({
+    try {
+      // Upload each file to storage and extract its text, then run real AI screening.
+      const documents = await Promise.all(
+        slots
+          .filter((s) => files[s.type])
+          .map((s) => prepareDocument(files[s.type], { name: s.label, type: s.type }, "resumes")),
+      );
+      const id = await actions.addApplicant({
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
@@ -84,11 +86,14 @@ export function UploadApplicantDialog({
         documents,
         source: "manual_upload",
       });
-      setScreening(false);
       onOpenChange(false);
       toast.success("Screening complete.");
       navigate({ to: "/applicants/$applicantId", params: { applicantId: id } });
-    }, 1600);
+    } catch {
+      toast.error("Something went wrong while screening. Please try again.");
+    } finally {
+      setScreening(false);
+    }
   }
 
   return (
@@ -140,8 +145,9 @@ export function UploadApplicantDialog({
                 key={s.type}
                 label={s.label}
                 optional={s.optional}
-                fileName={files[s.type]}
-                onPick={(n) => setFiles((prev) => ({ ...prev, [s.type]: n }))}
+                fileName={files[s.type]?.name}
+                onPick={() => {}}
+                onPickFile={(f) => setFiles((prev) => ({ ...prev, [s.type]: f }))}
                 onClear={() =>
                   setFiles((prev) => {
                     const next = { ...prev };

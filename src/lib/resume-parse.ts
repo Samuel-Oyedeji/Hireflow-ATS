@@ -72,7 +72,7 @@ export function parseNameEmail(text: string): { name: string; email: string } {
 
 /* -------------------- Text extraction (browser-only, lazy-loaded) -------------------- */
 
-async function extractPdf(file: File): Promise<string> {
+async function extractPdf(file: File, maxPages: number): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
   // Vite-bundled worker URL; set once per session.
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
@@ -81,8 +81,8 @@ async function extractPdf(file: File): Promise<string> {
     ).default;
   }
   const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  // Name + email live at the top; cap pages so long resumes stay fast.
-  const pageCount = Math.min(doc.numPages, 2);
+  // Cap pages so very long files stay fast; the default covers a full resume/transcript.
+  const pageCount = Math.min(doc.numPages, maxPages);
   let text = "";
   for (let p = 1; p <= pageCount; p++) {
     const page = await doc.getPage(p);
@@ -102,13 +102,14 @@ async function extractDocx(file: File): Promise<string> {
 }
 
 /**
- * Extract plain text from a resume file. Supports .pdf, .docx and .txt.
- * Rejects on unsupported types (e.g. legacy .doc) or unreadable files — callers
- * should catch and fall back to a filename-based guess.
+ * Extract plain text from a resume / transcript file. Supports .pdf, .docx and .txt.
+ * `maxPages` bounds PDF extraction (default covers a full document; name/email parsing
+ * only needs the top). Rejects on unsupported types (e.g. legacy .doc) or unreadable
+ * files — callers should catch and fall back to a filename-based guess.
  */
-export async function extractResumeText(file: File): Promise<string> {
+export async function extractResumeText(file: File, maxPages = 12): Promise<string> {
   const name = file.name.toLowerCase();
-  if (name.endsWith(".pdf")) return extractPdf(file);
+  if (name.endsWith(".pdf")) return extractPdf(file, maxPages);
   if (name.endsWith(".docx")) return extractDocx(file);
   if (name.endsWith(".txt")) return file.text();
   throw new Error(`Unsupported resume file type: ${file.name}`);

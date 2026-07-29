@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileDropField } from "@/components/file-drop-field";
 import { actions } from "@/lib/store";
+import { prepareDocument } from "@/lib/uploads";
 import type { ApplicantDocument } from "@/lib/types";
 
 type Slot = { type: ApplicantDocument["type"]; label: string };
@@ -31,7 +32,7 @@ export function AddDocumentsDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const [files, setFiles] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
   const [screening, setScreening] = useState(false);
 
   useEffect(() => {
@@ -41,20 +42,23 @@ export function AddDocumentsDialog({
     }
   }, [open]);
 
-  function submit() {
-    const documents: ApplicantDocument[] = slots
-      .filter((s) => files[s.type])
-      .map((s) => ({ type: s.type, name: s.label, fileName: files[s.type] }));
-    if (documents.length === 0) return toast.error("Add at least one document.");
+  async function submit() {
+    const picked = slots.filter((s) => files[s.type]);
+    if (picked.length === 0) return toast.error("Add at least one document.");
 
     setScreening(true);
-    // Simulate AI screening latency, matching the upload flow.
-    setTimeout(() => {
-      actions.addDocuments(applicantId, documents);
-      setScreening(false);
+    try {
+      const documents = await Promise.all(
+        picked.map((s) => prepareDocument(files[s.type], { name: s.label, type: s.type }, "resumes")),
+      );
+      await actions.addDocuments(applicantId, documents);
       onOpenChange(false);
       toast.success("Documents added — screening updated.");
-    }, 1600);
+    } catch {
+      toast.error("Something went wrong while re-screening. Please try again.");
+    } finally {
+      setScreening(false);
+    }
   }
 
   return (
@@ -74,8 +78,9 @@ export function AddDocumentsDialog({
               key={s.type}
               label={s.label}
               optional
-              fileName={files[s.type]}
-              onPick={(n) => setFiles((prev) => ({ ...prev, [s.type]: n }))}
+              fileName={files[s.type]?.name}
+              onPick={() => {}}
+              onPickFile={(f) => setFiles((prev) => ({ ...prev, [s.type]: f }))}
               onClear={() =>
                 setFiles((prev) => {
                   const next = { ...prev };

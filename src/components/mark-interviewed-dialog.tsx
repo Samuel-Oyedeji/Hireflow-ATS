@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileDropField } from "@/components/file-drop-field";
 import { actions, useAppState } from "@/lib/store";
+import { prepareTranscript } from "@/lib/uploads";
 import type { Applicant } from "@/lib/types";
 
 export function MarkInterviewedDialog({
@@ -27,23 +28,26 @@ export function MarkInterviewedDialog({
 }) {
   const navigate = useNavigate();
   const { currentUser } = useAppState();
-  const [fileName, setFileName] = useState<string | undefined>();
+  const [file, setFile] = useState<File | undefined>();
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setFileName(undefined);
+      setFile(undefined);
       setAnalyzing(false);
     }
   }, [open]);
 
-  function submit() {
-    if (!fileName) return toast.error("Upload the interview transcript to analyse it.");
+  async function submit() {
+    if (!file) return toast.error("Upload the interview transcript to analyse it.");
     setAnalyzing(true);
-    // Simulated analysis latency, matching the screening and upload flows.
-    setTimeout(() => {
-      const result = actions.analyzeTranscript(applicant.id, { fileName }, currentUser);
-      setAnalyzing(false);
+    try {
+      const { storagePath, text } = await prepareTranscript(file, "transcripts");
+      const result = await actions.analyzeTranscript(
+        applicant.id,
+        { fileName: file.name, storagePath, text },
+        currentUser,
+      );
       if (result?.errorFlag) {
         toast.error(result.errorReason ?? "Couldn't analyse that transcript.");
         return;
@@ -51,7 +55,11 @@ export function MarkInterviewedDialog({
       onOpenChange(false);
       toast.success(`${applicant.name} marked as interviewed.`);
       navigate({ to: "/applicants/$applicantId", params: { applicantId: applicant.id } });
-    }, 1400);
+    } catch {
+      toast.error("Couldn't analyse that transcript. Please try again.");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   return (
@@ -69,16 +77,17 @@ export function MarkInterviewedDialog({
           label="Interview transcript (PDF, DOCX, or TXT)"
           hint="PDF, DOCX, or TXT"
           accept=".pdf,.doc,.docx,.txt"
-          fileName={fileName}
-          onPick={setFileName}
-          onClear={() => setFileName(undefined)}
+          fileName={file?.name}
+          onPick={() => {}}
+          onPickFile={setFile}
+          onClear={() => setFile(undefined)}
         />
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={analyzing}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={analyzing || !fileName}>
+          <Button onClick={submit} disabled={analyzing || !file}>
             {analyzing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" /> Analysing transcript…

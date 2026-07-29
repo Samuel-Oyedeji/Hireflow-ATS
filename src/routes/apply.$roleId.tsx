@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileDropField } from "@/components/file-drop-field";
-import { actions, useAppState } from "@/lib/store";
+import { getPublicRoleFn, submitPublicApplicationFn } from "@/lib/data";
+import { prepareDocument } from "@/lib/uploads";
 import type { ApplicantDocument } from "@/lib/types";
 
 export const Route = createFileRoute("/apply/$roleId")({
   head: () => ({ meta: [{ title: "Apply — HireFlow" }] }),
+  // Scoped fetch: returns only the role's public fields + clinic name, never applicant data.
+  loader: ({ params }) => getPublicRoleFn({ data: params.roleId }),
   component: PublicApplyPage,
 });
 
@@ -32,20 +35,19 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 function PublicApplyPage() {
   const { roleId } = Route.useParams();
-  const { roles, clinicName } = useAppState();
-  const role = roles.find((r) => r.id === roleId);
+  const { clinicName, role } = Route.useLoaderData();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [files, setFiles] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
   const [honeypot, setHoneypot] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   // Role missing or closed — show a calm message, never a 404 (applicants shouldn't
   // land on a broken page).
-  if (!role || role.status === "closed") {
+  if (!role || role.status !== "open") {
     return (
       <Shell>
         <div className="rounded-xl border border-border bg-card p-8 text-center shadow-[var(--shadow-card)]">
@@ -77,7 +79,7 @@ function PublicApplyPage() {
     );
   }
 
-  function submit() {
+  async function submit() {
     if (!name.trim()) return toast.error("Please enter your full name.");
     if (!email.trim()) return toast.error("Please enter your email address.");
     if (!files.resume) return toast.error("A resume / CV is required.");
@@ -89,28 +91,27 @@ function PublicApplyPage() {
     }
 
     setSubmitting(true);
-    const documents: ApplicantDocument[] = slots
-      .filter((s) => files[s.type])
-      .map((s) => ({ type: s.type, name: s.label, fileName: files[s.type] }));
-
-    // Simulate upload + screening latency, matching the manual-upload flow.
-    setTimeout(() => {
-      try {
-        actions.addApplicant({
+    try {
+      const documents = await Promise.all(
+        slots
+          .filter((s) => files[s.type])
+          .map((s) => prepareDocument(files[s.type], { name: s.label, type: s.type }, "public")),
+      );
+      await submitPublicApplicationFn({
+        data: {
+          roleId,
           name: name.trim(),
           email: email.trim(),
           phone: phone.trim() || undefined,
-          roleId: role!.id,
           documents,
-          source: "public_form",
-        });
-        setSubmitting(false);
-        setSubmitted(true);
-      } catch {
-        setSubmitting(false);
-        toast.error("Something went wrong submitting your application. Please try again.");
-      }
-    }, 1400);
+        },
+      });
+      setSubmitted(true);
+    } catch {
+      toast.error("Something went wrong submitting your application. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -165,8 +166,9 @@ function PublicApplyPage() {
                 label={s.label}
                 optional={s.optional}
                 hint="PDF or DOCX · max 10MB"
-                fileName={files[s.type]}
-                onPick={(n) => setFiles((prev) => ({ ...prev, [s.type]: n }))}
+                fileName={files[s.type]?.name}
+                onPick={() => {}}
+                onPickFile={(f) => setFiles((prev) => ({ ...prev, [s.type]: f }))}
                 onClear={() =>
                   setFiles((prev) => {
                     const next = { ...prev };

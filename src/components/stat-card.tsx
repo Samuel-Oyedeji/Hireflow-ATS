@@ -27,7 +27,7 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "group rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-elevated)]",
+        "group rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)] transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[var(--shadow-elevated)]",
         className,
       )}
     >

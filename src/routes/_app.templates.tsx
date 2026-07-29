@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Mail, Plus } from "lucide-react";
+import { Loader2, Mail, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader, PageBody } from "@/components/page-header";
@@ -128,6 +128,7 @@ function TemplateDialog({
   const [usedFor, setUsedFor] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -138,18 +139,25 @@ function TemplateDialog({
     }
   }, [open, template]);
 
-  function save() {
+  async function save() {
     if (!name.trim()) return toast.error("Add a template name.");
     if (!subject.trim()) return toast.error("Add a subject line.");
-    actions.upsertTemplate({
-      id: template?.id,
-      name: name.trim(),
-      usedFor: usedFor.trim() || "Interview invite",
-      subject: subject.trim(),
-      body,
-    });
-    onOpenChange(false);
-    toast.success("Template saved.");
+    setSaving(true);
+    try {
+      await actions.upsertTemplate({
+        id: template?.id,
+        name: name.trim(),
+        usedFor: usedFor.trim() || "Interview invite",
+        subject: subject.trim(),
+        body,
+      });
+      onOpenChange(false);
+      toast.success("Template saved.");
+    } catch {
+      toast.error("Couldn't save the template. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -214,10 +222,18 @@ function TemplateDialog({
             Send test email
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={save}>Save template</Button>
+            <Button onClick={save} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                "Save template"
+              )}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>

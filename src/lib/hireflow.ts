@@ -10,6 +10,16 @@ export function formatDate(iso?: string): string {
   }
 }
 
+/** Time-of-day portion of an ISO timestamp, e.g. "9:14 AM". Empty when absent. */
+export function formatTime(iso?: string): string {
+  if (!iso) return "";
+  try {
+    return format(parseISO(iso), "h:mm a");
+  } catch {
+    return "";
+  }
+}
+
 export function workingStatus(a: Applicant): WorkingStatus {
   if (a.humanDecision === null) return "pending";
   return a.humanDecision === "advance" ? "advanced" : "rejected";
@@ -40,21 +50,6 @@ export const lifecycleStageLabel: Record<LifecycleStage, string> = {
   interviewed: "Interviewed",
   decided: "Decided",
 };
-
-export type HumanStatus = "awaiting" | "confirmed" | "overridden";
-
-export function humanStatus(a: Applicant): HumanStatus {
-  if (a.humanDecision === null) return "awaiting";
-  const matchesAi =
-    (a.humanDecision === "advance" && a.aiDecision === "advanced") ||
-    (a.humanDecision === "reject" && a.aiDecision === "rejected");
-  return matchesAi ? "confirmed" : "overridden";
-}
-
-export function humanStatusLabel(a: Applicant): string {
-  const s = humanStatus(a);
-  return s === "awaiting" ? "Awaiting review" : s === "confirmed" ? "Confirmed" : "Overridden";
-}
 
 export function applicantsForRole(applicants: Applicant[], roleId: string): Applicant[] {
   return applicants.filter((a) => a.roleId === roleId);

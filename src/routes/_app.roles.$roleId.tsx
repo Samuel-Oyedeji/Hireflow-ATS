@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ChevronDown, Copy, Pencil, Plus, Send, Users } from "lucide-react";
+import { ArrowLeft, ChevronDown, Copy, Loader2, Pencil, Plus, Send, Users } from "lucide-react";
 
 import { PageHeader, PageBody } from "@/components/page-header";
 import { ApplicantsTable } from "@/components/applicants-table";
@@ -61,6 +61,7 @@ function RoleDetailPage() {
   const [invitesOpen, setInvitesOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [origin, setOrigin] = useState("");
 
   // Public apply URL is client-only; resolve the origin after mount.
@@ -256,14 +257,31 @@ function RoleDetailPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={closing}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => {
-                actions.setRoleStatus(role.id, "closed");
-                toast.success("Role closed.");
+              disabled={closing}
+              onClick={async (e) => {
+                // Keep the dialog open with a spinner until the change persists.
+                e.preventDefault();
+                setClosing(true);
+                try {
+                  await actions.setRoleStatus(role.id, "closed");
+                  toast.success("Role closed.");
+                  setCloseOpen(false);
+                } catch {
+                  toast.error("Couldn't close the role. Please try again.");
+                } finally {
+                  setClosing(false);
+                }
               }}
             >
-              Close role
+              {closing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Closing…
+                </>
+              ) : (
+                "Close role"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -22,11 +22,11 @@ export function RolesTable({
   applicants: Applicant[];
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-secondary/40">
-            <tr className="border-b border-border text-left">
+          <thead className="sticky top-0 border-b border-border bg-[var(--surface-muted)]">
+            <tr className="text-left">
               <Th>Role title</Th>
               <Th>Department</Th>
               <Th className="text-center">Applicants</Th>
@@ -43,7 +43,7 @@ export function RolesTable({
               return (
                 <tr
                   key={role.id}
-                  className="border-b border-border transition-colors last:border-0 hover:bg-secondary/50"
+                  className="border-b border-border transition-colors last:border-0 hover:bg-accent/50"
                 >
                   <Td>
                     <Link
@@ -92,7 +92,7 @@ function Th({ children, className }: { children: React.ReactNode; className?: st
   return (
     <th
       className={cn(
-        "px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground",
+        "px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
         className,
       )}
     >
@@ -102,5 +102,5 @@ function Th({ children, className }: { children: React.ReactNode; className?: st
 }
 
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn("h-[52px] px-4 align-middle", className)}>{children}</td>;
+  return <td className={cn("h-14 px-5 align-middle", className)}>{children}</td>;
 }
