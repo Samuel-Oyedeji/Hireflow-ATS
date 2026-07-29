@@ -1,15 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  CheckCircle2,
-  Download,
-  FileText,
-  Info,
-  Loader2,
-  Plus,
-  Upload,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Download, FileText, Info, Loader2, Plus, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -23,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -35,8 +24,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileDropField } from "@/components/file-drop-field";
 import { cn } from "@/lib/utils";
 import { actions, useAppState } from "@/lib/store";
+import { prepareDocument } from "@/lib/uploads";
 import { extractResumeText, parseNameEmail } from "@/lib/resume-parse";
 import type { ApplicantDocument } from "@/lib/types";
+import type { DocInput } from "@/lib/data";
 
 /** An editable, not-yet-committed applicant row shown in the review step. */
 type EditRow = {
@@ -47,12 +38,20 @@ type EditRow = {
   notes: string;
   documents: ApplicantDocument[];
   source: string; // originating file name or CSV row label
+  file?: File; // the resume file (Mode A) — uploaded and screened on import
+  resumeText?: string; // text already extracted for the name/email preview
+  unreadable?: boolean; // extraction yielded no usable text (e.g. a screenshot-only PDF)
 };
 
-type Phase = "idle" | "processing" | "done";
-type Result = { imported: { name: string; email: string }[]; skipped: string[] };
-
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+// Summary handed back to the dialog when an import finishes, so it can show the
+// skipped rows in a follow-up modal. `skipped` entries are file/row labels.
+type ImportSummary = { imported: number; failed: number; skipped: string[] };
+
+// How many applicants to screen in parallel during a bulk import. Each is one
+// OpenRouter call; 5 balances speed against rate limits.
+const IMPORT_CONCURRENCY = 3;
 
 /* -------------------- Mode A: resume files -------------------- */
 // Each file's text is extracted client-side (see resume-parse) and the real name +
@@ -84,12 +83,19 @@ async function rowsFromFiles(files: File[]): Promise<{ rows: EditRow[]; skipped:
     const fallbackName = nameFromFilename(f.name);
     let name = fallbackName;
     let email = "";
+    let resumeText: string | undefined;
+    let unreadable = false;
     try {
-      const parsed = parseNameEmail(await extractResumeText(f));
+      resumeText = await extractResumeText(f);
+      const parsed = parseNameEmail(resumeText);
       name = parsed.name || fallbackName;
       email = parsed.email;
+      // Image-only PDFs (e.g. a screenshotted resume) carry no text layer, so
+      // extraction returns next to nothing and there's nothing to prefill from.
+      if (resumeText.replace(/\s/g, "").length < 10) unreadable = true;
     } catch {
       // Unreadable or unsupported (e.g. legacy .doc) — keep the filename guess.
+      unreadable = true;
     }
     rows.push({
       id: uid(),
@@ -99,6 +105,9 @@ async function rowsFromFiles(files: File[]): Promise<{ rows: EditRow[]; skipped:
       notes: "",
       documents: [{ type: "resume", name: "Resume / CV", fileName: f.name }],
       source: f.name,
+      file: f,
+      resumeText,
+      unreadable,
     });
   }
   return { rows, skipped };
@@ -200,6 +209,99 @@ function rowsFromCsv(text: string): EditRow[] {
   });
 }
 
+/* -------------------- Background import -------------------- */
+// Build the documents to persist for a row: Mode A rows carry a real file (uploaded +
+// its already-extracted text is reused for screening); CSV rows only have URL references,
+// so they're stored as metadata with no text (screening notes the missing documents).
+async function docsForRow(r: EditRow): Promise<DocInput[]> {
+  if (r.file) {
+    return [
+      await prepareDocument(r.file, { name: "Resume / CV", type: "resume" }, "resumes", r.resumeText),
+    ];
+  }
+  return r.documents.map((d) => ({ name: d.name, type: d.type, fileName: d.fileName }));
+}
+
+// Runs the whole import in the background, driven entirely by a top-right Sonner toast.
+// It holds no React state and captures everything it needs up front, so it keeps going
+// (and keeps updating the toast) after HR closes the dialog and works elsewhere.
+async function runBulkImport(params: {
+  validRows: EditRow[];
+  skipped: string[];
+  roleId: string;
+  fileName: string;
+  importedBy: string;
+  onFinished: (summary: ImportSummary) => void;
+}) {
+  const { validRows, skipped, roleId, fileName, importedBy, onFinished } = params;
+  const total = validRows.length;
+  const noun = (n: number) => `applicant${n === 1 ? "" : "s"}`;
+  const toastId = toast.loading(`Importing 0 of ${total} ${noun(total)}…`, {
+    position: "top-right",
+    duration: Infinity,
+  });
+
+  try {
+    const bulkImportId = await actions.createBulkImport({
+      roleId,
+      fileName,
+      importedBy,
+      totalFiles: total + skipped.length,
+      successful: total,
+      failed: 0,
+      skipped: skipped.length,
+    });
+
+    // Screen up to IMPORT_CONCURRENCY applicants at once. Each is an independent
+    // OpenRouter call, so a small pool cuts wall-clock time without hammering the API.
+    // A shared cursor hands each worker the next row.
+    let done = 0;
+    let failed = 0;
+    let cursor = 0;
+    async function worker() {
+      while (cursor < total) {
+        const r = validRows[cursor++];
+        try {
+          await actions.addApplicant({
+            name: r.name.trim(),
+            email: r.email.trim(),
+            phone: r.phone.trim() || undefined,
+            notes: r.notes.trim() || undefined,
+            documents: await docsForRow(r),
+            roleId,
+            source: "bulk_import",
+            bulkImportId,
+          });
+        } catch {
+          // Keep going — a single screening failure shouldn't abort the whole import.
+          failed++;
+        }
+        done++;
+        toast.loading(`Importing ${done} of ${total} ${noun(total)}…`, {
+          id: toastId,
+          position: "top-right",
+        });
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(IMPORT_CONCURRENCY, total) }, worker));
+
+    const imported = total - failed;
+    toast.success(
+      `Imported ${imported} ${noun(imported)}` +
+        (skipped.length ? ` · ${skipped.length} skipped` : "") +
+        (failed ? ` · ${failed} failed` : ""),
+      { id: toastId, position: "top-right", duration: 6000 },
+    );
+    if (skipped.length) onFinished({ imported, failed, skipped });
+  } catch {
+    toast.error("Bulk import failed. Please try again.", {
+      id: toastId,
+      position: "top-right",
+      duration: 6000,
+    });
+  }
+}
+
 /* -------------------- Component -------------------- */
 export function BulkImportDialog({
   open,
@@ -222,10 +324,9 @@ export function BulkImportDialog({
   const [rows, setRows] = useState<EditRow[] | null>(null);
   const [preSkipped, setPreSkipped] = useState<string[]>([]);
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<Result | null>(null);
   const [parsing, setParsing] = useState(false);
+  // Set when a background import finishes with skipped rows — drives the follow-up modal.
+  const [skippedInfo, setSkippedInfo] = useState<ImportSummary | null>(null);
   const addFilesRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -235,9 +336,6 @@ export function BulkImportDialog({
       setCsvName(undefined);
       setRows(null);
       setPreSkipped([]);
-      setPhase("idle");
-      setProgress(0);
-      setResult(null);
       setParsing(false);
     }
   }, [open, roleId]);
@@ -266,63 +364,33 @@ export function BulkImportDialog({
 
   const validCount = rows ? rows.filter((r) => r.name.trim() && r.email.trim()).length : 0;
 
+  // Kick off the import in the background and close the dialog immediately — progress
+  // and the final summary live in a top-right toast, so HR can keep working meanwhile.
   function runImport() {
     if (!rows) return;
     if (!effectiveRoleId) return toast.error("Select a role first.");
     const valid = rows.filter((r) => r.name.trim() && r.email.trim());
     const invalid = rows.filter((r) => !(r.name.trim() && r.email.trim()));
     const skipped = [...preSkipped, ...invalid.map((r) => `${r.source} (missing name or email)`)];
+    if (valid.length === 0)
+      return toast.error("Add at least one applicant with a name and email.");
     const fileName =
       tab === "csv" ? (csvName ?? "import.csv") : `${valid.length + skipped.length} resume files`;
 
-    const bulkImportId = actions.createBulkImport({
+    onOpenChange(false);
+    void runBulkImport({
+      validRows: valid,
+      skipped,
       roleId: effectiveRoleId,
       fileName,
       importedBy: currentUser,
-      totalFiles: valid.length + skipped.length,
-      successful: valid.length,
-      failed: 0,
-      skipped: skipped.length,
+      onFinished: setSkippedInfo,
     });
-
-    setResult({
-      imported: valid.map((r) => ({ name: r.name.trim(), email: r.email.trim() })),
-      skipped,
-    });
-    setProgress(0);
-    setPhase("processing");
-    if (valid.length === 0) {
-      setPhase("done");
-      return;
-    }
-    let i = 0;
-    const step = () => {
-      const r = valid[i];
-      actions.addApplicant({
-        name: r.name.trim(),
-        email: r.email.trim(),
-        phone: r.phone.trim() || undefined,
-        notes: r.notes.trim() || undefined,
-        documents: r.documents,
-        roleId: effectiveRoleId,
-        source: "bulk_import",
-        bulkImportId,
-      });
-      i += 1;
-      setProgress(i);
-      if (i < valid.length) window.setTimeout(step, 120);
-      else setPhase("done");
-    };
-    window.setTimeout(step, 200);
   }
 
-  const percent =
-    result && result.imported.length > 0
-      ? Math.round((progress / result.imported.length) * 100)
-      : 100;
-
   return (
-    <Dialog open={open} onOpenChange={(v) => phase !== "processing" && onOpenChange(v)}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Bulk import</DialogTitle>
@@ -332,7 +400,7 @@ export function BulkImportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {phase === "idle" && !roleId && (
+        {!roleId && (
           <div className="space-y-1.5">
             <Label>Role applied for</Label>
             <Select value={selectedRoleId} onValueChange={setSelectedRoleId}>
@@ -355,17 +423,22 @@ export function BulkImportDialog({
           </div>
         )}
 
-        {phase === "idle" && rows === null && parsing && (
+        {rows === null && parsing && (
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Reading resumes…
           </div>
         )}
 
-        {phase === "idle" && rows === null && !parsing && (
+        {rows === null && !parsing && (
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="files">Resume files</TabsTrigger>
-              <TabsTrigger value="csv">CSV</TabsTrigger>
+              <TabsTrigger value="csv" disabled className="gap-1.5">
+                CSV
+                <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Soon
+                </span>
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="files" className="space-y-3 pt-2">
@@ -416,7 +489,7 @@ export function BulkImportDialog({
           </Tabs>
         )}
 
-        {phase === "idle" && rows !== null && (
+        {rows !== null && (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm text-muted-foreground">
@@ -484,6 +557,12 @@ export function BulkImportDialog({
                         placeholder="email@example.com"
                         onChange={(e) => updateRow(r.id, { email: e.target.value })}
                       />
+                      {r.unreadable && (
+                        <p className="flex items-center gap-1.5 text-xs text-warning">
+                          <Info className="h-3.5 w-3.5 shrink-0" /> Couldn't read this file — please
+                          fill in manually.
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -509,29 +588,8 @@ export function BulkImportDialog({
           </div>
         )}
 
-        {phase === "processing" && result && (
-          <div className="space-y-3 py-2">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Importing {result.imported.length} applicants… {progress} processed
-            </div>
-            <Progress value={percent} />
-            <p className="text-xs text-muted-foreground">
-              Screening runs automatically as each applicant is created.
-            </p>
-          </div>
-        )}
-
-        {phase === "done" && result && <ResultsSummary result={result} />}
-
         <DialogFooter>
-          {phase === "done" ? (
-            <Button onClick={() => onOpenChange(false)}>Done</Button>
-          ) : phase === "processing" ? (
-            <Button variant="ghost" disabled>
-              Importing…
-            </Button>
-          ) : rows ? (
+          {rows ? (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
@@ -547,7 +605,37 @@ export function BulkImportDialog({
           )}
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      <Dialog open={skippedInfo !== null} onOpenChange={(v) => !v && setSkippedInfo(null)}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Import complete</DialogTitle>
+            <DialogDescription>
+              {skippedInfo &&
+                `Imported ${skippedInfo.imported} · ${skippedInfo.skipped.length} skipped` +
+                  (skippedInfo.failed ? ` · ${skippedInfo.failed} failed` : "")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-border bg-secondary/40 p-3">
+            <p className="mb-2 text-sm font-semibold text-foreground">
+              Skipped {skippedInfo?.skipped.length ?? 0}
+            </p>
+            <ul className="max-h-64 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+              {skippedInfo?.skipped.map((s, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <X className="mt-0.5 h-3 w-3 shrink-0 text-danger" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSkippedInfo(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -592,39 +680,5 @@ function MultiFileDrop({ onFiles }: { onFiles: (files: File[]) => void }) {
         }}
       />
     </button>
-  );
-}
-
-function ResultsSummary({ result }: { result: Result }) {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-md border border-success/25 bg-success-muted p-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-success">
-          <CheckCircle2 className="h-4 w-4" /> Imported: {result.imported.length}
-        </div>
-        {result.imported.length > 0 && (
-          <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-xs text-foreground">
-            {result.imported.map((a, i) => (
-              <li key={i}>
-                {a.name} <span className="text-muted-foreground">· {a.email}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {result.skipped.length > 0 && (
-        <div className="rounded-md border border-border bg-secondary/40 p-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <XCircle className="h-4 w-4" /> Skipped: {result.skipped.length}
-          </div>
-          <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
-            {result.skipped.map((f, i) => (
-              <li key={i}>{f}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }

@@ -9,6 +9,7 @@ import { StatusBadge, type Tone } from "@/components/status-badge";
 import { FileDropField } from "@/components/file-drop-field";
 import { cn } from "@/lib/utils";
 import { actions } from "@/lib/store";
+import { prepareTranscript } from "@/lib/uploads";
 import { formatDate, lifecycleStage, lifecycleStageLabel } from "@/lib/hireflow";
 import type {
   Applicant,
@@ -75,20 +76,28 @@ export function InterviewSection({
   role?: Role;
   currentUser: string;
 }) {
-  const [fileName, setFileName] = useState<string | undefined>();
+  const [file, setFile] = useState<File | undefined>();
   const [analyzing, setAnalyzing] = useState(false);
   const analysis = applicant.transcriptAnalysis;
   const hasValidAnalysis = !!analysis && !analysis.errorFlag;
 
-  function analyse() {
-    if (!fileName) return toast.error("Upload a transcript first.");
+  async function analyse() {
+    if (!file) return toast.error("Upload a transcript first.");
     setAnalyzing(true);
-    // Simulated analysis latency, matching the screening flow.
-    setTimeout(() => {
-      actions.analyzeTranscript(applicant.id, { fileName }, currentUser);
+    try {
+      const { storagePath, text } = await prepareTranscript(file, "transcripts");
+      const result = await actions.analyzeTranscript(
+        applicant.id,
+        { fileName: file.name, storagePath, text },
+        currentUser,
+      );
+      setFile(undefined);
+      if (result?.errorFlag) toast.error(result.errorReason ?? "Couldn't analyse that transcript.");
+    } catch {
+      toast.error("Couldn't analyse that transcript. Please try again.");
+    } finally {
       setAnalyzing(false);
-      setFileName(undefined);
-    }, 1600);
+    }
   }
 
   return (
@@ -119,11 +128,12 @@ export function InterviewSection({
             label="Upload interview transcript (PDF, DOCX, or TXT)"
             hint="PDF, DOCX, or TXT"
             accept=".pdf,.doc,.docx,.txt"
-            fileName={fileName}
-            onPick={setFileName}
-            onClear={() => setFileName(undefined)}
+            fileName={file?.name}
+            onPick={() => {}}
+            onPickFile={setFile}
+            onClear={() => setFile(undefined)}
           />
-          <Button onClick={analyse} disabled={!fileName}>
+          <Button onClick={analyse} disabled={!file}>
             Analyse transcript
           </Button>
         </div>
@@ -282,6 +292,7 @@ function FinalDecisionBlock({
   const [editing, setEditing] = useState(false);
   const [choice, setChoice] = useState<TranscriptSuggestion | null>(existing?.decision ?? null);
   const [reason, setReason] = useState(existing?.overrideReason ?? "");
+  const [saving, setSaving] = useState(false);
 
   const decided = !!existing;
   const showForm = !decided || editing;
@@ -293,13 +304,23 @@ function FinalDecisionBlock({
     setEditing(true);
   }
 
-  function save() {
+  async function save() {
     if (!choice) return toast.error("Select a final decision.");
-    if (isOverride && !reason.trim())
-      return toast.error("Add a reason for overriding the AI suggestion.");
-    actions.saveFinalDecision(applicant.id, choice, isOverride ? reason.trim() : "", currentUser);
-    setEditing(false);
-    toast.success("Final decision saved.");
+    setSaving(true);
+    try {
+      await actions.saveFinalDecision(
+        applicant.id,
+        choice,
+        isOverride ? reason.trim() : "",
+        currentUser,
+      );
+      setEditing(false);
+      toast.success("Final decision saved.");
+    } catch {
+      toast.error("Couldn't save the final decision. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -344,7 +365,7 @@ function FinalDecisionBlock({
 
           {isOverride && (
             <div className="mt-4 space-y-1.5">
-              <Label htmlFor="final-override">Reason for override</Label>
+              <Label htmlFor="final-override">Reason for override (optional)</Label>
               <Textarea
                 id="final-override"
                 value={reason}
@@ -356,9 +377,17 @@ function FinalDecisionBlock({
           )}
 
           <div className="mt-5 flex items-center gap-2">
-            <Button onClick={save}>Save final decision</Button>
+            <Button onClick={save} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                "Save final decision"
+              )}
+            </Button>
             {editing && (
-              <Button variant="ghost" onClick={() => setEditing(false)}>
+              <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
                 Cancel
               </Button>
             )}

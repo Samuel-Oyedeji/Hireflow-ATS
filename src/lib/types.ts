@@ -46,6 +46,8 @@ export interface Applicant {
   aiScore: number; // 0-100
   aiDecision: AiDecision;
   reasoning: string;
+  education: string[]; // qualifications the screener read from the documents
+  workHistory: string[]; // roles the screener read from the documents
   criteriaResults: CriterionResult[];
   documents: ApplicantDocument[];
   humanDecision: HumanDecision;

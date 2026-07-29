@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  Briefcase,
   Check,
   Download,
   FileText,
+  GraduationCap,
+  Loader2,
   Minus,
   Plus,
   Scale,
@@ -63,6 +66,7 @@ function ApplicantReviewPage() {
   const [editing, setEditing] = useState(false);
   const [choice, setChoice] = useState<HumanDecision>(null);
   const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
   const [addDocsOpen, setAddDocsOpen] = useState(false);
 
   const hasTranscript = !!applicant?.transcript;
@@ -120,20 +124,25 @@ function ApplicantReviewPage() {
     setEditing(true);
   }
 
-  function save() {
+  async function save() {
     if (!choice) return toast.error("Select a decision first.");
-    if (isOverride && !reason.trim())
-      return toast.error("Add a reason for overriding the AI decision.");
-    actions.saveDecision(
-      applicant!.id,
-      choice,
-      isOverride ? reason.trim() : "",
-      currentUser,
-    );
-    setEditing(false);
-    toast.success(
-      `Marked as ${choice === "advance" ? "advanced" : "rejected"}.`,
-    );
+    setSaving(true);
+    try {
+      await actions.saveDecision(
+        applicant!.id,
+        choice,
+        isOverride ? reason.trim() : "",
+        currentUser,
+      );
+      setEditing(false);
+      toast.success(
+        `Marked as ${choice === "advance" ? "advanced" : "rejected"}.`,
+      );
+    } catch {
+      toast.error("Couldn't save the decision. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -228,6 +237,22 @@ function ApplicantReviewPage() {
                       {applicant.reasoning}
                     </p>
                   </div>
+
+                  {(applicant.education.length > 0 ||
+                    applicant.workHistory.length > 0) && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <ExtractedList
+                        icon={GraduationCap}
+                        title="Education"
+                        items={applicant.education}
+                      />
+                      <ExtractedList
+                        icon={Briefcase}
+                        title="Work history"
+                        items={applicant.workHistory}
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -407,7 +432,8 @@ function ApplicantReviewPage() {
                         </Label>
                       </div>
                       <p className="mt-1 pl-6 text-xs text-muted-foreground">
-                        Add a short reason — this helps improve future screening.
+                        Add a short reason if you like — optional, just for your
+                        own record.
                       </p>
                       <Textarea
                         id="override"
@@ -422,11 +448,21 @@ function ApplicantReviewPage() {
 
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <Button onClick={save} disabled={!choice}>
-                        Save decision
+                      <Button onClick={save} disabled={!choice || saving}>
+                        {saving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                          </>
+                        ) : (
+                          "Save decision"
+                        )}
                       </Button>
                       {editing && (
-                        <Button variant="ghost" onClick={() => setEditing(false)}>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setEditing(false)}
+                          disabled={saving}
+                        >
                           Cancel
                         </Button>
                       )}
@@ -460,6 +496,37 @@ function ApplicantReviewPage() {
         onOpenChange={setAddDocsOpen}
       />
     </>
+  );
+}
+
+function ExtractedList({
+  icon: Icon,
+  title,
+  items,
+}: {
+  icon: typeof Check;
+  title: string;
+  items: string[];
+}) {
+  return (
+    <div>
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Icon className="h-3.5 w-3.5" />
+        {title}
+      </h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Not stated in the documents.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {items.map((it, i) => (
+            <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/50" />
+              {it}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileDropField } from "@/components/file-drop-field";
 import { actions, useAppState } from "@/lib/store";
+import { prepareTranscript } from "@/lib/uploads";
 import type { Applicant } from "@/lib/types";
 
 /**
@@ -34,7 +35,7 @@ export function BulkMarkInterviewedDialog({
   onDone?: () => void;
 }) {
   const { currentUser } = useAppState();
-  const [files, setFiles] = useState<Record<string, string>>({});
+  const [files, setFiles] = useState<Record<string, File>>({});
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
@@ -46,21 +47,28 @@ export function BulkMarkInterviewedDialog({
 
   const ready = applicants.filter((a) => files[a.id]);
 
-  function submit() {
+  async function submit() {
     if (ready.length === 0)
       return toast.error("Upload a transcript for at least one applicant.");
 
     setAnalyzing(true);
-    // Simulated analysis latency, matching the single-applicant and screening flows.
-    setTimeout(() => {
+    try {
       const failed: string[] = [];
       let succeeded = 0;
       for (const a of ready) {
-        const result = actions.analyzeTranscript(a.id, { fileName: files[a.id] }, currentUser);
-        if (result?.errorFlag) failed.push(a.name);
-        else succeeded += 1;
+        try {
+          const { storagePath, text } = await prepareTranscript(files[a.id], "transcripts");
+          const result = await actions.analyzeTranscript(
+            a.id,
+            { fileName: files[a.id].name, storagePath, text },
+            currentUser,
+          );
+          if (result?.errorFlag) failed.push(a.name);
+          else succeeded += 1;
+        } catch {
+          failed.push(a.name);
+        }
       }
-      setAnalyzing(false);
 
       if (succeeded > 0)
         toast.success(
@@ -71,7 +79,9 @@ export function BulkMarkInterviewedDialog({
 
       onOpenChange(false);
       onDone?.();
-    }, 1600);
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   return (
@@ -99,8 +109,9 @@ export function BulkMarkInterviewedDialog({
                 label="Interview transcript"
                 hint="PDF, DOCX, or TXT"
                 accept=".pdf,.doc,.docx,.txt"
-                fileName={files[a.id]}
-                onPick={(n) => setFiles((prev) => ({ ...prev, [a.id]: n }))}
+                fileName={files[a.id]?.name}
+                onPick={() => {}}
+                onPickFile={(f) => setFiles((prev) => ({ ...prev, [a.id]: f }))}
                 onClear={() =>
                   setFiles((prev) => {
                     const next = { ...prev };

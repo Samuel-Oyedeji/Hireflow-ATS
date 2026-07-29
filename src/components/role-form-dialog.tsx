@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -23,13 +23,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { actions } from "@/lib/store";
-import type { Criterion, CriterionWeight, Role } from "@/lib/types";
+import type { CriterionWeight, Role } from "@/lib/types";
 
 type DraftCriterion = { id: string; label: string; detail: string; weight: CriterionWeight };
 
 function emptyCriterion(): DraftCriterion {
   return { id: `nc-${Math.random().toString(36).slice(2, 8)}`, label: "", detail: "", weight: "required" };
 }
+
+const PRESET_CRITERIA = [
+  "Years of experience",
+  "Education requirement",
+  "Licensure / certification",
+  "Availability",
+  "References",
+] as const;
 
 export function RoleFormDialog({
   open,
@@ -47,6 +55,7 @@ export function RoleFormDialog({
   const [department, setDepartment] = useState("");
   const [statusOpen, setStatusOpen] = useState(true);
   const [criteria, setCriteria] = useState<DraftCriterion[]>([emptyCriterion()]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -67,7 +76,18 @@ export function RoleFormDialog({
     setCriteria((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
 
-  function save() {
+  function addPreset(label: string) {
+    setCriteria((prev) => {
+      // Fill the first fully-empty criterion if one exists, otherwise append.
+      const emptyIdx = prev.findIndex((c) => !c.label.trim() && !c.detail.trim());
+      if (emptyIdx !== -1) {
+        return prev.map((c, i) => (i === emptyIdx ? { ...c, label } : c));
+      }
+      return [...prev, { ...emptyCriterion(), label }];
+    });
+  }
+
+  async function save() {
     if (!title.trim()) {
       toast.error("Add a role title.");
       return;
@@ -76,10 +96,12 @@ export function RoleFormDialog({
       toast.error("Add a department.");
       return;
     }
+    // New criteria (drafted with an "nc-" id) send no id — the DB assigns a real uuid.
+    // Existing criteria keep their id so they're updated in place, preserving screening results.
     const cleaned = criteria
       .filter((c) => c.label.trim())
-      .map<Criterion>((c) => ({
-        id: c.id.startsWith("nc-") ? `${Math.random().toString(36).slice(2, 9)}` : c.id,
+      .map((c) => ({
+        id: c.id.startsWith("nc-") ? undefined : c.id,
         label: c.label.trim(),
         detail: c.detail.trim(),
         weight: c.weight,
@@ -88,16 +110,23 @@ export function RoleFormDialog({
       toast.error("Add at least one screening criterion.");
       return;
     }
-    const id = actions.upsertRole({
-      id: role?.id,
-      title: title.trim(),
-      department: department.trim(),
-      status: statusOpen ? "open" : "closed",
-      criteria: cleaned,
-    });
-    toast.success(isEdit ? "Role updated." : "Role created.");
-    onOpenChange(false);
-    onSaved?.(id);
+    setSaving(true);
+    try {
+      const id = await actions.upsertRole({
+        id: role?.id,
+        title: title.trim(),
+        department: department.trim(),
+        status: statusOpen ? "open" : "closed",
+        criteria: cleaned,
+      });
+      toast.success(isEdit ? "Role updated." : "Role created.");
+      onOpenChange(false);
+      onSaved?.(id);
+    } catch {
+      toast.error("Couldn't save the role. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -146,8 +175,23 @@ export function RoleFormDialog({
           </div>
 
           <div>
-            <div className="mb-1 flex items-center justify-between">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <Label>Screening criteria</Label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {PRESET_CRITERIA.filter(
+                  (p) => !criteria.some((c) => c.label.trim().toLowerCase() === p.toLowerCase()),
+                ).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => addPreset(preset)}
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-secondary hover:text-foreground"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">
               These criteria are what the AI screens each applicant against.
@@ -218,10 +262,18 @@ export function RoleFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={save}>Save role</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+              </>
+            ) : (
+              "Save role"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

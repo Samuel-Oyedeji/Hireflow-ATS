@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { PageHeader, PageBody } from "@/components/page-header";
@@ -19,6 +20,7 @@ function SettingsPage() {
   const { clinicName, currentUser } = useAppState();
   const navigate = useNavigate();
   const [name, setName] = useState(clinicName);
+  const [saving, setSaving] = useState(false);
 
   return (
     <>
@@ -35,12 +37,26 @@ function SettingsPage() {
           </div>
           <div className="mt-4">
             <Button
-              onClick={() => {
-                actions.setClinicName(name.trim() || clinicName);
-                toast.success("Settings saved.");
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await actions.setClinicName(name.trim() || clinicName);
+                  toast.success("Settings saved.");
+                } catch {
+                  toast.error("Couldn't save settings. Please try again.");
+                } finally {
+                  setSaving(false);
+                }
               }}
             >
-              Save changes
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+                </>
+              ) : (
+                "Save changes"
+              )}
             </Button>
           </div>
         </section>

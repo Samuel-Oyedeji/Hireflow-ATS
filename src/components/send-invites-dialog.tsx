@@ -35,6 +35,7 @@ export function SendInvitesDialog({
 }) {
   const { templates, clinicName } = useAppState();
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (open && templates[0]) setTemplateId(templates[0].id);
@@ -43,12 +44,19 @@ export function SendInvitesDialog({
   const template = templates.find((t) => t.id === templateId);
   const first = recipients[0];
 
-  function send() {
-    actions.sendInvites(recipients.map((r) => r.id));
-    onOpenChange(false);
-    toast.success(
-      `Invites sent to ${recipients.length} applicant${recipients.length === 1 ? "" : "s"}.`,
-    );
+  async function send() {
+    setSending(true);
+    try {
+      await actions.sendInvites(recipients.map((r) => r.id));
+      onOpenChange(false);
+      toast.success(
+        `Invites sent to ${recipients.length} applicant${recipients.length === 1 ? "" : "s"}.`,
+      );
+    } catch {
+      toast.error("Couldn't send the invites. Please try again.");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -123,8 +131,8 @@ export function SendInvitesDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={send} disabled={!template || recipients.length === 0}>
-            Send invites
+          <Button onClick={send} disabled={sending || !template || recipients.length === 0}>
+            {sending ? "Sending…" : "Send invites"}
           </Button>
         </DialogFooter>
       </DialogContent>
