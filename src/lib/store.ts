@@ -142,7 +142,7 @@ const applicants: Applicant[] = [
     email: "sarah.mitchell@example.com",
     phone: "(416) 555-0142",
     roleId: "r1",
-    submittedDate: "2026-06-18",
+    submittedDate: "2026-06-18T09:12:00",
     aiScore: 87,
     aiDecision: "advanced",
     reasoning:
@@ -169,7 +169,7 @@ const applicants: Applicant[] = [
     email: "david.chen@example.com",
     phone: "(647) 555-0199",
     roleId: "r1",
-    submittedDate: "2026-06-21",
+    submittedDate: "2026-06-21T14:37:00",
     aiScore: 78,
     aiDecision: "advanced",
     reasoning:
@@ -191,7 +191,7 @@ const applicants: Applicant[] = [
     email: "priya.nair@example.com",
     phone: "(905) 555-0177",
     roleId: "r1",
-    submittedDate: "2026-06-19",
+    submittedDate: "2026-06-19T11:05:00",
     aiScore: 54,
     aiDecision: "rejected",
     reasoning:
@@ -216,7 +216,7 @@ const applicants: Applicant[] = [
     email: "tomas.romero@example.com",
     phone: "(416) 555-0123",
     roleId: "r1",
-    submittedDate: "2026-06-22",
+    submittedDate: "2026-06-22T16:48:00",
     aiScore: 61,
     aiDecision: "rejected",
     reasoning:
@@ -243,7 +243,7 @@ const applicants: Applicant[] = [
     email: "jessica.brown@example.com",
     phone: "(437) 555-0150",
     roleId: "r2",
-    submittedDate: "2026-06-24",
+    submittedDate: "2026-06-24T08:41:00",
     aiScore: 90,
     aiDecision: "advanced",
     reasoning:
@@ -265,7 +265,7 @@ const applicants: Applicant[] = [
     email: "michael.oconnor@example.com",
     phone: "(289) 555-0188",
     roleId: "r2",
-    submittedDate: "2026-06-25",
+    submittedDate: "2026-06-25T13:22:00",
     aiScore: 48,
     aiDecision: "rejected",
     reasoning:
@@ -284,7 +284,7 @@ const applicants: Applicant[] = [
     email: "aisha.khan@example.com",
     phone: "(416) 555-0166",
     roleId: "r2",
-    submittedDate: "2026-06-17",
+    submittedDate: "2026-06-17T10:58:00",
     aiScore: 84,
     aiDecision: "advanced",
     reasoning:
@@ -307,7 +307,7 @@ const applicants: Applicant[] = [
     email: "emily.watson@example.com",
     phone: "(613) 555-0144",
     roleId: "r3",
-    submittedDate: "2026-06-26",
+    submittedDate: "2026-06-26T15:09:00",
     aiScore: 76,
     aiDecision: "advanced",
     reasoning:
@@ -329,7 +329,7 @@ const applicants: Applicant[] = [
     email: "robert.singh@example.com",
     phone: "(905) 555-0133",
     roleId: "r3",
-    submittedDate: "2026-06-23",
+    submittedDate: "2026-06-23T12:33:00",
     aiScore: 58,
     aiDecision: "rejected",
     reasoning:
@@ -350,7 +350,7 @@ const applicants: Applicant[] = [
     email: "linda.park@example.com",
     phone: "(416) 555-0111",
     roleId: "r4",
-    submittedDate: "2026-04-15",
+    submittedDate: "2026-04-15T09:47:00",
     aiScore: 88,
     aiDecision: "advanced",
     reasoning:
@@ -631,7 +631,7 @@ export const actions = {
       source: input.source ?? "manual_upload",
       notes: input.notes,
       bulkImportId: input.bulkImportId,
-      submittedDate: todayISO(),
+      submittedDate: new Date().toISOString(),
       ...simulateScreening(role),
       documents: input.documents,
       humanDecision: null,
