@@ -18,13 +18,18 @@ import { BulkMarkInterviewedDialog } from "@/components/bulk-mark-interviewed-di
 
 function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
   return (
-    <th className={cn("px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground", className)}>
+    <th
+      className={cn(
+        "px-5 py-3.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground",
+        className,
+      )}
+    >
       {children}
     </th>
   );
 }
 function Td({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <td className={cn("h-[52px] px-4 align-middle", className)}>{children}</td>;
+  return <td className={cn("h-14 px-5 align-middle", className)}>{children}</td>;
 }
 
 function humanTone(a: Applicant) {
@@ -79,8 +84,8 @@ export function ApplicantsTable({
   return (
     <div className="space-y-3">
       {selectable && selectedApplicants.length > 0 && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-secondary/40 px-4 py-2.5">
-          <span className="text-sm font-medium text-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-accent/70 px-4 py-2.5 shadow-[var(--shadow-sm)]">
+          <span className="text-sm font-medium text-accent-foreground">
             {selectedApplicants.length} selected
           </span>
           <div className="flex items-center gap-2">
@@ -94,13 +99,13 @@ export function ApplicantsTable({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-[var(--shadow-card)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-secondary/40">
-              <tr className="border-b border-border text-left">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
+        <div className="overflow-hidden">
+          <table className="w-full table-fixed text-sm">
+            <thead className="border-b border-border bg-[var(--surface-muted)]">
+              <tr className="text-left">
                 {selectable && (
-                  <th className="w-10 py-3 pl-4 pr-0 align-middle">
+                  <th className="w-10 py-3 pl-5 pr-0 align-middle">
                     <Checkbox
                       aria-label="Select all invited applicants"
                       disabled={eligibleIds.length === 0}
@@ -110,12 +115,12 @@ export function ApplicantsTable({
                   </th>
                 )}
                 <Th>Name</Th>
-                {showRole && <Th>Role</Th>}
-                <Th>Submitted</Th>
-                <Th>Rating</Th>
-                <Th>Recommendation</Th>
-                <Th>Human status</Th>
-                <Th className="text-right" />
+                {showRole && <Th className="w-[150px]">Role</Th>}
+                <Th className="w-[108px]">Submitted</Th>
+                <Th className="w-[88px]">Rating</Th>
+                <Th className="w-[132px]">Recommendation</Th>
+                <Th className="w-[184px]">Human status</Th>
+                <Th className="w-[236px] text-right" />
               </tr>
             </thead>
             <tbody>
@@ -125,9 +130,9 @@ export function ApplicantsTable({
                 // A transcript is "submitted" once it has been successfully analysed.
                 const transcriptIn = !!a.transcriptAnalysis && !a.transcriptAnalysis.errorFlag;
                 return (
-                  <tr key={a.id} className="border-b border-border transition-colors last:border-0 hover:bg-secondary/50">
+                  <tr key={a.id} className="border-b border-border transition-colors last:border-0 hover:bg-accent/50">
                     {selectable && (
-                      <td className="w-10 py-3 pl-4 pr-0 align-middle">
+                      <td className="w-10 py-3 pl-5 pr-0 align-middle">
                         {eligible && (
                           <Checkbox
                             aria-label={`Select ${a.name}`}
@@ -141,14 +146,21 @@ export function ApplicantsTable({
                       <Link
                         to="/applicants/$applicantId"
                         params={{ applicantId: a.id }}
-                        className="font-medium text-foreground hover:text-primary"
+                        title={a.name}
+                        className="block truncate font-medium text-foreground hover:text-primary"
                       >
                         {a.name}
                       </Link>
-                      <div className="text-xs text-muted-foreground">{a.email}</div>
+                      <div className="truncate text-xs text-muted-foreground" title={a.email}>
+                        {a.email}
+                      </div>
                     </Td>
                     {showRole && (
-                      <Td className="text-muted-foreground">{role?.title ?? "—"}</Td>
+                      <Td className="text-muted-foreground">
+                        <span className="block truncate" title={role?.title ?? undefined}>
+                          {role?.title ?? "—"}
+                        </span>
+                      </Td>
                     )}
                     <Td className="text-muted-foreground whitespace-nowrap">{formatDate(a.submittedDate)}</Td>
                     <Td>
@@ -163,7 +175,7 @@ export function ApplicantsTable({
                       </StatusBadge>
                     </Td>
                     <Td>
-                      <div className="flex items-center gap-2 whitespace-nowrap">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <StatusBadge tone={humanTone(a)}>{humanStatusLabel(a)}</StatusBadge>
                         {transcriptIn ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-teal">

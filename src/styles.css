@@ -5,9 +5,9 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * HireFlow design system — clinical/enterprise, light mode only.
- * Calm clinical blue, off-white surfaces, precise data-dense look.
- * Color values use the exact brand hex specified for the product.
+ * HireFlow design system — "Slate & Teal", clinical/enterprise, light mode only.
+ * Deep teal carries the brand; graphite slate anchors text and structure;
+ * generous off-white surfaces. Understated, premium, data-dense.
  */
 
 @theme inline {
@@ -67,76 +67,86 @@
 }
 
 :root {
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 
-  --background: #fafbfc;
-  --foreground: #1a1d23;
+  --background: #f6f7f8;
+  --foreground: #1e2a2e;
 
   --card: #ffffff;
-  --card-foreground: #1a1d23;
+  --card-foreground: #1e2a2e;
 
   --popover: #ffffff;
-  --popover-foreground: #1a1d23;
+  --popover-foreground: #1e2a2e;
 
-  --primary: #2563a8;
+  /* Deep teal — the single brand accent */
+  --primary: #0f766e;
   --primary-foreground: #ffffff;
+  --primary-hover: #0c5f58;
 
-  --secondary: #f1f5f9;
-  --secondary-foreground: #1a1d23;
+  --secondary: #eef2f2;
+  --secondary-foreground: #33414d;
 
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted: #eef2f2;
+  --muted-foreground: #5b6a70;
 
-  --accent: #eef4fa;
-  --accent-foreground: #1a1d23;
+  /* Teal-tinted surface for hover / selected states */
+  --accent: #e7f1f0;
+  --accent-foreground: #0f766e;
 
-  --destructive: #b91c1c;
+  --destructive: #b4443b;
   --destructive-foreground: #ffffff;
 
-  --border: #e5e8ec;
-  --input: #e5e8ec;
-  --ring: #2563a8;
+  --border: #e1e7e7;
+  --input: #dde4e4;
+  --ring: #0f766e;
 
   /* Status tokens — consistent mapping across the whole app */
   --success: #15803d;
   --success-foreground: #ffffff;
-  --success-muted: #f0fdf4;
+  --success-muted: #eaf6ee;
 
   --warning: #b45309;
   --warning-foreground: #ffffff;
-  --warning-muted: #fffbeb;
+  --warning-muted: #fbf1e3;
 
-  --danger: #b91c1c;
+  --danger: #b4443b;
   --danger-foreground: #ffffff;
-  --danger-muted: #fef2f2;
+  --danger-muted: #fbecea;
 
-  --info: #2563a8;
+  /* Info shares the brand teal so status + brand read as one system */
+  --info: #0f766e;
   --info-foreground: #ffffff;
-  --info-muted: #eef4fa;
+  --info-muted: #e7f1f0;
 
-  /* Teal accent — pulled from the HireFlow mark */
-  --teal: #0f9b94;
+  /* Teal accent === brand primary */
+  --teal: #0f766e;
   --teal-foreground: #ffffff;
-  --teal-muted: #e6f7f5;
+  --teal-muted: #e7f1f0;
+
+  /* Graphite slate ink — headers, table chrome, secondary structure */
+  --ink: #33414d;
+
+  /* Neutral surface used behind table headers and toolbars */
+  --surface-muted: #f1f4f4;
 
   /* Gradients & shadows for a softer, more polished surface */
-  --gradient-primary: linear-gradient(135deg, #2563a8 0%, #1f7fa6 55%, #0f9b94 100%);
-  --gradient-subtle: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%);
-  --gradient-brand-soft: linear-gradient(135deg, #eef4fa 0%, #e6f7f5 100%);
+  --gradient-primary: linear-gradient(135deg, #0f766e 0%, #0c5f58 100%);
+  --gradient-subtle: linear-gradient(180deg, #ffffff 0%, #f3f6f5 100%);
+  --gradient-brand-soft: linear-gradient(135deg, #e7f1f0 0%, #eef2f2 100%);
 
-  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.05);
-  --shadow-elevated: 0 10px 30px -12px rgb(37 99 168 / 0.22), 0 4px 10px -6px rgb(15 23 42 / 0.08);
-  --shadow-primary: 0 6px 16px -6px rgb(37 99 168 / 0.45);
+  --shadow-sm: 0 1px 2px 0 rgb(19 60 75 / 0.06);
+  --shadow-card: 0 1px 2px 0 rgb(19 60 75 / 0.05), 0 1px 3px -1px rgb(19 60 75 / 0.05);
+  --shadow-elevated: 0 12px 32px -14px rgb(15 118 110 / 0.26), 0 6px 14px -8px rgb(19 60 75 / 0.10);
+  --shadow-primary: 0 6px 16px -7px rgb(15 118 110 / 0.45);
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #1a1d23;
-  --sidebar-primary: #2563a8;
+  --sidebar-foreground: #1e2a2e;
+  --sidebar-primary: #0f766e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef4fa;
-  --sidebar-accent-foreground: #2563a8;
-  --sidebar-border: #e5e8ec;
-  --sidebar-ring: #2563a8;
+  --sidebar-accent: #e7f1f0;
+  --sidebar-accent-foreground: #0f766e;
+  --sidebar-border: #e1e7e7;
+  --sidebar-ring: #0f766e;
 }
 
 @layer base {

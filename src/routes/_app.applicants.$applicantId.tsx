@@ -1,12 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   Download,
   FileText,
   Minus,
   Plus,
+  Scale,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -342,52 +345,98 @@ function ApplicantReviewPage() {
 
             {/* Human decision */}
             {showForm && (
-              <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
-                <h2 className="text-sm font-semibold text-foreground">
-                  Human decision
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Review the AI's reasoning, then confirm or override the
-                  decision.
-                </p>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <DecisionButton
-                    active={choice === "advance"}
-                    suggested={suggested === "advance"}
-                    tone="success"
-                    label="Confirm: advance"
-                    onClick={() => setChoice("advance")}
-                  />
-                  <DecisionButton
-                    active={choice === "reject"}
-                    suggested={suggested === "reject"}
-                    tone="danger"
-                    label="Confirm: reject"
-                    onClick={() => setChoice("reject")}
-                  />
+              <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
+                <div className="flex flex-col gap-3 border-b border-border bg-[var(--surface-muted)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary ring-1 ring-primary/10">
+                      <Scale className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold text-foreground">
+                        Human decision
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        Confirm the AI's recommendation, or override it with a
+                        reason.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-[var(--shadow-sm)] sm:self-auto">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    AI suggests
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        suggested === "advance" ? "text-success" : "text-danger",
+                      )}
+                    >
+                      {suggested === "advance" ? "Advance" : "Reject"}
+                    </span>
+                  </span>
                 </div>
 
-                {isOverride && (
-                  <div className="mt-4 space-y-1.5">
-                    <Label htmlFor="override">Reason for override</Label>
-                    <Textarea
-                      id="override"
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                      placeholder="Why are you changing this decision? (helps improve future screening)"
-                      rows={3}
+                <div className="p-6">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <DecisionButton
+                      active={choice === "advance"}
+                      suggested={suggested === "advance"}
+                      tone="success"
+                      label="Advance"
+                      hint="Move forward to interview"
+                      onClick={() => setChoice("advance")}
+                    />
+                    <DecisionButton
+                      active={choice === "reject"}
+                      suggested={suggested === "reject"}
+                      tone="danger"
+                      label="Reject"
+                      hint="Do not proceed with this applicant"
+                      onClick={() => setChoice("reject")}
                     />
                   </div>
-                )}
 
-                <div className="mt-5 flex items-center gap-2">
-                  <Button onClick={save}>Save decision</Button>
-                  {editing && (
-                    <Button variant="ghost" onClick={() => setEditing(false)}>
-                      Cancel
-                    </Button>
+                  {isOverride && (
+                    <div className="mt-4 rounded-xl border border-warning/30 bg-warning-muted p-4">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+                        <Label
+                          htmlFor="override"
+                          className="text-sm font-semibold text-warning"
+                        >
+                          You're overriding the AI recommendation
+                        </Label>
+                      </div>
+                      <p className="mt-1 pl-6 text-xs text-muted-foreground">
+                        Add a short reason — this helps improve future screening.
+                      </p>
+                      <Textarea
+                        id="override"
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="Why are you changing this decision?"
+                        rows={3}
+                        className="mt-3 bg-card"
+                      />
+                    </div>
                   )}
+
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Button onClick={save} disabled={!choice}>
+                        Save decision
+                      </Button>
+                      {editing && (
+                        <Button variant="ghost" onClick={() => setEditing(false)}>
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                    {!choice && (
+                      <span className="text-xs text-muted-foreground">
+                        Select a decision to continue
+                      </span>
+                    )}
+                  </div>
                 </div>
               </section>
             )}
@@ -419,38 +468,81 @@ function DecisionButton({
   suggested,
   tone,
   label,
+  hint,
   onClick,
 }: {
   active: boolean;
   suggested: boolean;
   tone: "success" | "danger";
   label: string;
+  hint: string;
   onClick: () => void;
 }) {
+  const Icon = tone === "success" ? Check : X;
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "relative flex items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition-colors",
+        "group relative flex items-center gap-3 rounded-xl border p-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card active:scale-[0.99]",
         active
           ? tone === "success"
-            ? "border-success bg-success-muted text-success ring-1 ring-success"
-            : "border-danger bg-danger-muted text-danger ring-1 ring-danger"
-          : "border-border bg-card text-foreground hover:bg-secondary/50",
+            ? "border-success bg-success-muted ring-1 ring-success/40"
+            : "border-danger bg-danger-muted ring-1 ring-danger/40"
+          : "border-border bg-card hover:-translate-y-px hover:border-primary/30 hover:bg-accent/40 hover:shadow-[var(--shadow-sm)]",
       )}
     >
-      {tone === "success" ? (
-        <Check className="h-4 w-4" />
-      ) : (
-        <X className="h-4 w-4" />
-      )}
-      {label}
-      {suggested && !active && (
-        <span className="absolute right-3 text-xs font-normal text-muted-foreground">
-          Suggested
+      <span
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
+          active
+            ? tone === "success"
+              ? "bg-success text-success-foreground"
+              : "bg-danger text-danger-foreground"
+            : tone === "success"
+              ? "bg-success-muted text-success"
+              : "bg-danger-muted text-danger",
+        )}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-sm font-semibold",
+              active
+                ? tone === "success"
+                  ? "text-success"
+                  : "text-danger"
+                : "text-foreground",
+            )}
+          >
+            {label}
+          </span>
+          {suggested && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+              Suggested
+            </span>
+          )}
         </span>
-      )}
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          {hint}
+        </span>
+      </span>
+      <span
+        className={cn(
+          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+          active
+            ? tone === "success"
+              ? "border-success bg-success text-success-foreground"
+              : "border-danger bg-danger text-danger-foreground"
+            : "border-border text-transparent group-hover:border-primary/40",
+        )}
+      >
+        <Check className="h-3 w-3" />
+      </span>
     </button>
   );
 }

@@ -49,9 +49,9 @@ export function AppSidebar() {
             key={item.to}
             to={item.to}
             activeOptions={{ exact: item.to === "/dashboard" }}
-            className="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-secondary-foreground transition-all hover:bg-secondary data-[status=active]:bg-[image:var(--gradient-brand-soft)] data-[status=active]:text-sidebar-accent-foreground data-[status=active]:shadow-[var(--shadow-sm)] data-[status=active]:before:absolute data-[status=active]:before:left-0 data-[status=active]:before:top-1/2 data-[status=active]:before:h-5 data-[status=active]:before:w-1 data-[status=active]:before:-translate-y-1/2 data-[status=active]:before:rounded-full data-[status=active]:before:bg-primary"
+            className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[status=active]:bg-accent data-[status=active]:font-semibold data-[status=active]:text-primary"
           >
-            <item.icon className="h-[18px] w-[18px] text-muted-foreground transition-colors group-data-[status=active]:text-primary" />
+            <item.icon className="h-[18px] w-[18px] text-muted-foreground transition-colors group-hover:text-foreground group-data-[status=active]:text-primary" />
             {item.label}
           </Link>
         ))}
