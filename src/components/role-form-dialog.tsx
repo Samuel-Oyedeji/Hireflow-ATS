@@ -15,20 +15,51 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { actions } from "@/lib/store";
 import type { CriterionWeight, Role } from "@/lib/types";
 
 type DraftCriterion = { id: string; label: string; detail: string; weight: CriterionWeight };
 
+const WEIGHT_OPTIONS: { value: CriterionWeight; label: string }[] = [
+  { value: "required", label: "Required" },
+  { value: "preferred", label: "Preferred" },
+  { value: "nice-to-have", label: "Nice-to-have" },
+];
+
+function WeightSelector({
+  value,
+  onChange,
+}: {
+  value: CriterionWeight;
+  onChange: (v: CriterionWeight) => void;
+}) {
+  const index = Math.max(0, WEIGHT_OPTIONS.findIndex((w) => w.value === value));
+  return (
+    <div className="relative grid w-72 grid-cols-3 rounded-full border border-input bg-secondary/60 p-1 shadow-inner ring-1 ring-border/60">
+      <div
+        className="pointer-events-none absolute inset-y-1 left-1 rounded-full bg-primary shadow-sm ring-1 ring-primary/70 transition-transform duration-200 ease-out"
+        style={{ width: "calc((100% - 0.5rem) / 3)", transform: `translateX(${index * 100}%)` }}
+      />
+      {WEIGHT_OPTIONS.map((w) => (
+        <button
+          key={w.value}
+          type="button"
+          onClick={() => onChange(w.value)}
+          className={`relative z-10 rounded-full py-1 text-center text-xs font-medium transition-colors ${
+            value === w.value
+              ? "text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {w.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function emptyCriterion(): DraftCriterion {
-  return { id: `nc-${Math.random().toString(36).slice(2, 8)}`, label: "", detail: "", weight: "required" };
+  return { id: `nc-${Math.random().toString(36).slice(2, 8)}`, label: "", detail: "", weight: "preferred" };
 }
 
 const PRESET_CRITERIA = [
@@ -96,20 +127,18 @@ export function RoleFormDialog({
       toast.error("Add a department.");
       return;
     }
-    // New criteria (drafted with an "nc-" id) send no id — the DB assigns a real uuid.
-    // Existing criteria keep their id so they're updated in place, preserving screening results.
-    const cleaned = criteria
-      .filter((c) => c.label.trim())
-      .map((c) => ({
-        id: c.id.startsWith("nc-") ? undefined : c.id,
-        label: c.label.trim(),
-        detail: c.detail.trim(),
-        weight: c.weight,
-      }));
-    if (cleaned.length === 0) {
-      toast.error("Add at least one screening criterion.");
+    if (criteria.some((c) => !c.label.trim() || !c.detail.trim())) {
+      toast.error("Every criterion needs a label and a value — fill them in or remove the empty ones.");
       return;
     }
+    // New criteria (drafted with an "nc-" id) send no id — the DB assigns a real uuid.
+    // Existing criteria keep their id so they're updated in place, preserving screening results.
+    const cleaned = criteria.map((c) => ({
+      id: c.id.startsWith("nc-") ? undefined : c.id,
+      label: c.label.trim(),
+      detail: c.detail.trim(),
+      weight: c.weight,
+    }));
     setSaving(true);
     try {
       const id = await actions.upsertRole({
@@ -228,21 +257,14 @@ export function RoleFormDialog({
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Importance</span>
-                    <Select
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
+                      Importance
+                    </span>
+                    <WeightSelector
                       value={c.weight}
-                      onValueChange={(v) => updateCriterion(c.id, { weight: v as CriterionWeight })}
-                    >
-                      <SelectTrigger className="h-8 w-44">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="required">Required</SelectItem>
-                        <SelectItem value="preferred">Preferred</SelectItem>
-                        <SelectItem value="nice-to-have">Nice-to-have</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      onChange={(v) => updateCriterion(c.id, { weight: v })}
+                    />
                     <span className="ml-auto text-xs text-muted-foreground">#{idx + 1}</span>
                   </div>
                 </div>
