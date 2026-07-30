@@ -31,11 +31,19 @@ export async function uploadToBucket(file: File, path: string): Promise<string> 
   return path;
 }
 
-/** Time-limited download URL for a stored file (bucket is private). */
-export async function signedUrl(path: string, expiresIn = 3600): Promise<string> {
+/**
+ * Time-limited URL for a stored file (bucket is private). Pass a `download`
+ * filename to force a download (Content-Disposition: attachment); omit it to
+ * let the browser render the file inline (e.g. in an iframe preview).
+ */
+export async function signedUrl(
+  path: string,
+  expiresIn = 3600,
+  download?: string,
+): Promise<string> {
   const { data, error } = await getSupabase()
     .storage.from(BUCKET)
-    .createSignedUrl(path, expiresIn);
+    .createSignedUrl(path, expiresIn, download ? { download } : undefined);
   if (error || !data) throw new Error(`Signed URL failed: ${error?.message ?? "unknown error"}`);
   return data.signedUrl;
 }

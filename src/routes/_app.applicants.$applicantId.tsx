@@ -6,6 +6,7 @@ import {
   Briefcase,
   Check,
   Download,
+  Eye,
   FileText,
   GraduationCap,
   Loader2,
@@ -31,16 +32,22 @@ import { ScoreRing } from "@/components/score-ring";
 import { InterviewSection } from "@/components/interview-section";
 import { AddDocumentsDialog } from "@/components/add-documents-dialog";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { documentUrlFn } from "@/lib/data";
 import { actions, useAppState } from "@/lib/store";
 import { formatDate, weightLabel } from "@/lib/hireflow";
-import type { CriterionMatch, HumanDecision } from "@/lib/types";
+import type {
+  ApplicantDocument,
+  CriterionMatch,
+  HumanDecision,
+} from "@/lib/types";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/applicants/$applicantId")({
@@ -68,6 +75,40 @@ function ApplicantReviewPage() {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [addDocsOpen, setAddDocsOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<ApplicantDocument | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState(false);
+
+  // Resolve a time-limited inline URL for the doc being previewed. The bucket is
+  // private, so this round-trips to the server for a signed URL each open.
+  useEffect(() => {
+    setPreviewUrl(null);
+    setPreviewError(false);
+    const path = previewDoc?.storagePath;
+    if (!path) return;
+    let active = true;
+    documentUrlFn({ data: { storagePath: path } })
+      .then(({ url }) => active && setPreviewUrl(url))
+      .catch(() => active && setPreviewError(true));
+    return () => {
+      active = false;
+    };
+  }, [previewDoc?.storagePath]);
+
+  async function downloadDoc(doc: ApplicantDocument) {
+    if (!doc.storagePath) return;
+    try {
+      const { url } = await documentUrlFn({
+        data: { storagePath: doc.storagePath, downloadName: doc.fileName },
+      });
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.fileName;
+      a.click();
+    } catch {
+      toast.error("Couldn't prepare the download. Please try again.");
+    }
+  }
 
   const hasTranscript = !!applicant?.transcript;
   const [tab, setTab] = useState<"assessment" | "interviewed">(
@@ -329,33 +370,42 @@ function ApplicantReviewPage() {
                   No documents on file. Add documents to run AI screening.
                 </p>
               )}
-              <Accordion type="single" collapsible className="w-full">
+              <ul className="flex flex-col divide-y divide-border">
                 {applicant.documents.map((doc, i) => (
-                  <AccordionItem key={i} value={`doc-${i}`}>
-                    <AccordionTrigger className="text-sm">
-                      <span className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-primary" />
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate font-medium text-foreground">
                         {doc.name}
-                        <span className="font-normal text-muted-foreground">
-                          · {doc.fileName}
-                        </span>
                       </span>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border bg-secondary/30 px-4 py-8 text-center">
-                        <FileText className="h-8 w-8 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">
-                          Inline preview is not available in this demo.
-                        </p>
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4" /> Download{" "}
-                          {doc.fileName}
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                      <span className="truncate font-normal text-muted-foreground">
+                        · {doc.fileName}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPreviewDoc(doc)}
+                      >
+                        <Eye className="h-4 w-4" /> Preview
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Download ${doc.fileName}`}
+                        disabled={!doc.storagePath}
+                        onClick={() => downloadDoc(doc)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </span>
+                  </li>
                 ))}
-              </Accordion>
+              </ul>
             </section>
 
             {/* Interview transcript upload — shown here until a transcript exists,
@@ -495,6 +545,65 @@ function ApplicantReviewPage() {
         open={addDocsOpen}
         onOpenChange={setAddDocsOpen}
       />
+
+      <Sheet
+        open={previewDoc !== null}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        >
+          <SheetHeader className="flex-row items-center justify-between gap-3 border-b border-border p-5 text-left">
+            <div className="min-w-0">
+              <SheetTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4 shrink-0 text-primary" />
+                <span className="truncate">{previewDoc?.name}</span>
+              </SheetTitle>
+              <SheetDescription className="truncate">
+                {previewDoc?.fileName}
+              </SheetDescription>
+            </div>
+            {previewDoc && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mr-8 shrink-0"
+                disabled={!previewDoc.storagePath}
+                onClick={() => downloadDoc(previewDoc)}
+              >
+                <Download className="h-4 w-4" /> Download
+              </Button>
+            )}
+          </SheetHeader>
+
+          {!previewDoc?.storagePath ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+              <FileText className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                No stored file for this document.
+              </p>
+            </div>
+          ) : previewError ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+              <FileText className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Couldn't load a preview. Try downloading the file instead.
+              </p>
+            </div>
+          ) : previewUrl ? (
+            <iframe
+              src={previewUrl}
+              title={`Preview of ${previewDoc.fileName}`}
+              className="h-full w-full flex-1 border-0 bg-muted"
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-6">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

@@ -31,6 +31,7 @@ export interface ApplicantDocument {
   name: string;
   type: "resume" | "cover-letter" | "other";
   fileName: string;
+  storagePath?: string; // path in the private Supabase bucket; absent for legacy/demo docs
 }
 
 export interface Applicant {

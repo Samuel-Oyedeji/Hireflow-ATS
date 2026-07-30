@@ -16,7 +16,7 @@ import type {
   TranscriptSuggestion,
   TranscriptUpload,
 } from "./types";
-import { getSupabase, uploadToBucket } from "./server/supabase";
+import { getSupabase, signedUrl, uploadToBucket } from "./server/supabase";
 import {
   analyzeTranscriptText,
   screenResume,
@@ -300,7 +300,12 @@ function assembleApplicant(
       .map((r) => ({ criterionId: r.criterion_id, match: r.match, note: r.note })),
     documents: docs
       .filter((d) => d.applicant_id === row.id)
-      .map((d) => ({ name: d.name, type: d.type, fileName: d.file_name })),
+      .map((d) => ({
+        name: d.name,
+        type: d.type,
+        fileName: d.file_name,
+        storagePath: d.storage_path ?? undefined,
+      })),
     humanDecision: (row.human_decision ?? null) as HumanDecision,
     overrideReason: row.override_reason ?? undefined,
     decidedBy: row.decided_by ?? undefined,
@@ -537,6 +542,17 @@ export const uploadFileFn = createServerFn({ method: "POST" })
     await uploadToBucket(file, path);
     return { fileName: file.name, storagePath: path };
   });
+
+/**
+ * Time-limited URL for a stored document. The bucket is private, so the client
+ * can't build these itself. Pass `downloadName` to force a download; omit it for
+ * an inline URL suitable for iframe preview.
+ */
+export const documentUrlFn = createServerFn({ method: "POST" })
+  .validator((input: { storagePath: string; downloadName?: string }) => input)
+  .handler(async ({ data }) => ({
+    url: await signedUrl(data.storagePath, 3600, data.downloadName),
+  }));
 
 export const addApplicantFn = createServerFn({ method: "POST" })
   .validator((input: AddApplicantInput) => input)
