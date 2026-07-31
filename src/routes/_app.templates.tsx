@@ -81,7 +81,8 @@ function TemplatesPage() {
                 {templates.map((t) => (
                   <tr
                     key={t.id}
-                    className="border-b border-border transition-colors last:border-0 hover:bg-secondary/50"
+                    onClick={() => setEditing(t)}
+                    className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-secondary/50"
                   >
                     <td className="h-[52px] px-4 align-middle font-medium text-foreground">{t.name}</td>
                     <td className="h-[52px] px-4 align-middle text-muted-foreground">{t.usedFor}</td>
@@ -89,7 +90,14 @@ function TemplatesPage() {
                       {formatDate(t.lastEdited)}
                     </td>
                     <td className="h-[52px] px-4 text-right align-middle">
-                      <Button variant="outline" size="sm" onClick={() => setEditing(t)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(t);
+                        }}
+                      >
                         Edit
                       </Button>
                     </td>
@@ -128,7 +136,16 @@ function TemplateDialog({
   const [usedFor, setUsedFor] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [activeField, setActiveField] = useState<"subject" | "body">("body");
   const [saving, setSaving] = useState(false);
+
+  function insertPlaceholder(token: string) {
+    if (activeField === "subject") {
+      setSubject((s) => `${s}${token}`);
+    } else {
+      setBody((b) => `${b}${token}`);
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -184,7 +201,12 @@ function TemplateDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="t-subject">Subject line</Label>
-              <Input id="t-subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
+              <Input
+                id="t-subject"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                onFocus={() => setActiveField("subject")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="t-body">Body</Label>
@@ -192,6 +214,7 @@ function TemplateDialog({
                 id="t-body"
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
+                onFocus={() => setActiveField("body")}
                 rows={12}
                 className="font-mono text-xs leading-relaxed"
               />
@@ -205,11 +228,11 @@ function TemplateDialog({
                 <button
                   key={p.token}
                   type="button"
-                  onClick={() => setBody((b) => `${b}${p.token}`)}
+                  onClick={() => insertPlaceholder(p.token)}
                   className="block w-full rounded px-2 py-1 text-left hover:bg-secondary"
-                  title="Click to insert into body"
+                  title="Click to insert into the focused field"
                 >
-                  <code className="text-xs font-medium text-primary">{p.token}</code>
+                  <code className="block break-all text-xs font-medium text-primary">{p.token}</code>
                   <span className="block text-xs text-muted-foreground">{p.desc}</span>
                 </button>
               ))}

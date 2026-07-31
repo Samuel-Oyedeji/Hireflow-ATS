@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, ArrowRight, Check, Lightbulb, Loader2, Minus, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Lightbulb, Loader2, Minus, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge, type Tone } from "@/components/status-badge";
 import { FileDropField } from "@/components/file-drop-field";
+import { DecisionEmailDialog } from "@/components/decision-email-dialog";
 import { cn } from "@/lib/utils";
 import { actions } from "@/lib/store";
 import { prepareTranscript } from "@/lib/uploads";
 import { formatDate, lifecycleStage, lifecycleStageLabel } from "@/lib/hireflow";
+import type { LifecycleStage } from "@/lib/hireflow";
 import type {
   Applicant,
   Assessment,
@@ -28,6 +30,19 @@ const suggestionDisplay: Record<TranscriptSuggestion, { label: string; tone: Ton
 };
 
 const confidenceLabel: Record<Confidence, string> = { high: "High", medium: "Medium", low: "Low" };
+const confidenceTone: Record<Confidence, Tone> = {
+  high: "success",
+  medium: "warning",
+  low: "danger",
+};
+const lifecycleStageTone: Record<LifecycleStage, Tone> = {
+  uploaded: "neutral",
+  screened: "info",
+  reviewed: "info",
+  invited: "warning",
+  interviewed: "info",
+  decided: "success",
+};
 const assessmentLabel: Record<Assessment, string> = {
   met: "Met",
   not_met: "Not met",
@@ -65,6 +80,11 @@ const bannerTone: Record<TranscriptSuggestion, string> = {
   hire: "border-success/25 bg-success-muted text-success",
   further_review: "border-warning/25 bg-warning-muted text-warning",
   reject: "border-danger/25 bg-danger-muted text-danger",
+};
+const suggestionToneText: Record<TranscriptSuggestion, string> = {
+  hire: "text-success",
+  further_review: "text-warning",
+  reject: "text-danger",
 };
 
 export function InterviewSection({
@@ -123,13 +143,15 @@ export function InterviewSection({
     <section className="rounded-lg border border-border border-l-4 border-l-teal bg-card p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-teal">Interview</h2>
-        <StatusBadge tone="neutral">{lifecycleStageLabel[lifecycleStage(applicant)]}</StatusBadge>
+        <StatusBadge tone={lifecycleStageTone[lifecycleStage(applicant)]} dot>
+          {lifecycleStageLabel[lifecycleStage(applicant)]}
+        </StatusBadge>
       </div>
 
       {hasValidAnalysis ? (
         <>
+          <FinalDecisionBlock applicant={applicant} role={role} currentUser={currentUser} />
           <AnalysisCard analysis={analysis} role={role} transcript={applicant.transcript} />
-          <FinalDecisionBlock applicant={applicant} currentUser={currentUser} />
         </>
       ) : (
         <div className="space-y-3">
@@ -183,7 +205,7 @@ function AnalysisCard({
           <StatusBadge tone={s.tone} dot>
             {s.label}
           </StatusBadge>
-          <StatusBadge tone="neutral">
+          <StatusBadge tone={confidenceTone[analysis.confidence]} dot>
             {confidenceLabel[analysis.confidence]} confidence
           </StatusBadge>
         </div>
@@ -303,9 +325,11 @@ function BulletList({
 
 function FinalDecisionBlock({
   applicant,
+  role,
   currentUser,
 }: {
   applicant: Applicant;
+  role?: Role;
   currentUser: string;
 }) {
   const analysis = applicant.transcriptAnalysis!;
@@ -314,6 +338,8 @@ function FinalDecisionBlock({
   const [choice, setChoice] = useState<TranscriptSuggestion | null>(existing?.decision ?? null);
   const [reason, setReason] = useState(existing?.overrideReason ?? "");
   const [saving, setSaving] = useState(false);
+  // After a hire/reject is saved, prompt to email the applicant from a template.
+  const [emailDecision, setEmailDecision] = useState<"hire" | "reject" | null>(null);
 
   const decided = !!existing;
   const showForm = !decided || editing;
@@ -337,6 +363,7 @@ function FinalDecisionBlock({
       );
       setEditing(false);
       toast.success("Final decision saved.");
+      if (choice === "hire" || choice === "reject") setEmailDecision(choice);
     } catch {
       toast.error("Couldn't save the final decision. Please try again.");
     } finally {
@@ -345,9 +372,7 @@ function FinalDecisionBlock({
   }
 
   return (
-    <div className="mt-6 border-t border-border pt-5">
-      <h3 className="text-sm font-semibold text-foreground">Final decision</h3>
-
+    <div className="mb-6 border-b border-border pb-5">
       {decided && !editing && existing && (
         <div
           className={cn(
@@ -367,62 +392,111 @@ function FinalDecisionBlock({
       )}
 
       {showForm && (
-        <>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Confirm the AI suggestion or choose a different outcome.
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {finalOptions.map((opt) => (
-              <FinalDecisionButton
-                key={opt.value}
-                active={choice === opt.value}
-                suggested={analysis.overallSuggestion === opt.value}
-                tone={opt.tone}
-                label={opt.label}
-                onClick={() => setChoice(opt.value)}
-              />
-            ))}
+        <section className="mt-3 rounded-lg border border-border bg-card px-3.5 py-3 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="font-medium text-foreground">Final decision</span>
+              <span className="text-border">·</span>
+              AI suggests{" "}
+              <span
+                className={cn(
+                  "font-semibold",
+                  suggestionToneText[analysis.overallSuggestion],
+                )}
+              >
+                {finalLabel[analysis.overallSuggestion]}
+              </span>
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {finalOptions.map((opt) => (
+                <FinalDecisionButton
+                  key={opt.value}
+                  active={choice === opt.value}
+                  suggested={analysis.overallSuggestion === opt.value}
+                  tone={opt.tone}
+                  label={opt.label}
+                  onClick={() => setChoice(opt.value)}
+                />
+              ))}
+              <Button
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={save}
+                disabled={!choice || saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+              {editing && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setEditing(false)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
           </div>
 
           {isOverride && (
-            <div className="mt-4 space-y-1.5">
-              <Label htmlFor="final-override">Reason for override (optional)</Label>
+            <div className="mt-4 border-t border-border pt-4">
+              <Label
+                htmlFor="final-override"
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+                Overriding the AI — add a note (optional)
+              </Label>
               <Textarea
                 id="final-override"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Why are you deciding differently from the AI suggestion?"
-                rows={3}
+                rows={2}
+                className="mt-2 bg-card"
               />
             </div>
           )}
+        </section>
+      )}
 
-          <div className="mt-5 flex items-center gap-2">
-            <Button onClick={save} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Saving…
-                </>
-              ) : (
-                "Save final decision"
-              )}
-            </Button>
-            {editing && (
-              <Button variant="ghost" onClick={() => setEditing(false)} disabled={saving}>
-                Cancel
-              </Button>
-            )}
-          </div>
-        </>
+      {emailDecision && (
+        <DecisionEmailDialog
+          open={emailDecision !== null}
+          onOpenChange={(v) => !v && setEmailDecision(null)}
+          applicant={applicant}
+          role={role}
+          decision={emailDecision}
+        />
       )}
     </div>
   );
 }
 
-const activeClasses: Record<"success" | "warning" | "danger", string> = {
-  success: "border-success bg-success-muted text-success ring-1 ring-success",
-  warning: "border-warning bg-warning-muted text-warning ring-1 ring-warning",
-  danger: "border-danger bg-danger-muted text-danger ring-1 ring-danger",
+const finalActiveClasses: Record<"success" | "warning" | "danger", string> = {
+  success: "border-success bg-success-muted text-success ring-1 ring-success/40",
+  warning: "border-warning bg-warning-muted text-warning ring-1 ring-warning/40",
+  danger: "border-danger bg-danger-muted text-danger ring-1 ring-danger/40",
+};
+const finalOptionIcon: Record<"success" | "warning" | "danger", typeof Check> = {
+  success: Check,
+  warning: Minus,
+  danger: X,
+};
+const finalIconColor: Record<"success" | "warning" | "danger", string> = {
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-danger",
 };
 
 function FinalDecisionButton({
@@ -438,21 +512,26 @@ function FinalDecisionButton({
   label: string;
   onClick: () => void;
 }) {
+  const Icon = finalOptionIcon[tone];
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "relative flex items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition-colors",
+        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card active:scale-[0.98]",
         active
-          ? activeClasses[tone]
-          : "border-border bg-card text-foreground hover:bg-secondary/50",
+          ? finalActiveClasses[tone]
+          : suggested
+            ? "border-primary/40 bg-card text-foreground ring-2 ring-primary/15 hover:-translate-y-px hover:shadow-[var(--shadow-sm)]"
+            : "border-border bg-card text-foreground hover:-translate-y-px hover:border-primary/30 hover:bg-accent/40 hover:shadow-[var(--shadow-sm)]",
       )}
     >
+      <Icon className={cn("h-3.5 w-3.5", active ? "" : finalIconColor[tone])} />
       {label}
       {suggested && !active && (
-        <span className="absolute right-2 top-1 text-[10px] font-normal text-muted-foreground">
-          Suggested
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+          AI pick
         </span>
       )}
     </button>
