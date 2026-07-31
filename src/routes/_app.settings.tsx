@@ -17,9 +17,10 @@ export const Route = createFileRoute("/_app/settings")({
 });
 
 function SettingsPage() {
-  const { clinicName, currentUser } = useAppState();
+  const { clinicName, interviewLink, currentUser } = useAppState();
   const navigate = useNavigate();
   const [name, setName] = useState(clinicName);
+  const [link, setLink] = useState(interviewLink);
   const [saving, setSaving] = useState(false);
 
   return (
@@ -35,6 +36,19 @@ function SettingsPage() {
             <Label htmlFor="clinic">Clinic name</Label>
             <Input id="clinic" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          <div className="mt-4 max-w-md space-y-1.5">
+            <Label htmlFor="interview-link">Interview scheduling link</Label>
+            <Input
+              id="interview-link"
+              type="url"
+              placeholder="https://cal.com/your-clinic/interview"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Inserted into invite emails as {"{{interview_scheduling_link}}"}.
+            </p>
+          </div>
           <div className="mt-4">
             <Button
               disabled={saving}
@@ -42,6 +56,7 @@ function SettingsPage() {
                 setSaving(true);
                 try {
                   await actions.setClinicName(name.trim() || clinicName);
+                  await actions.setInterviewLink(link.trim());
                   toast.success("Settings saved.");
                 } catch {
                   toast.error("Couldn't save settings. Please try again.");

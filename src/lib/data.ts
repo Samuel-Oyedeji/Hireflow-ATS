@@ -462,6 +462,41 @@ async function writeCriteriaResults(applicantId: string, screening: ScreeningRes
   );
 }
 
+/** Combined extracted text of every document on file, oldest first (blank if none). */
+async function applicantDocumentsText(applicantId: string): Promise<string> {
+  const allDocs = unwrap<DocRow[]>(
+    await getSupabase().from("applicant_documents").select("*").eq("applicant_id", applicantId),
+  ) ?? [];
+  return allDocs
+    .map((d) => d.extracted_text?.trim())
+    .filter((t): t is string => !!t)
+    .join("\n\n");
+}
+
+/**
+ * Overwrite an applicant's screening with a fresh result: update the summary fields
+ * and replace its criteria results. Callers must only pass a result that actually came
+ * back from the model, so a failed/timed-out call leaves the prior assessment intact.
+ */
+async function persistScreening(applicantId: string, screening: ScreeningResult) {
+  const sb = getSupabase();
+  unwrap(
+    await sb
+      .from("applicants")
+      .update({
+        ai_score: screening.aiScore,
+        ai_decision: screening.aiDecision,
+        reasoning: screening.reasoning,
+        education: screening.education,
+        work_history: screening.workHistory,
+      })
+      .eq("id", applicantId)
+      .select("id"),
+  );
+  unwrap(await sb.from("criteria_results").delete().eq("applicant_id", applicantId).select("id"));
+  await writeCriteriaResults(applicantId, screening);
+}
+
 /* ---------------- server functions ---------------- */
 
 export const getAppState = createServerFn({ method: "GET" }).handler(async (): Promise<AppState> => {
@@ -492,7 +527,11 @@ export const getAppState = createServerFn({ method: "GET" }).handler(async (): P
     sb.from("bulk_imports").select("*").order("created_at", { ascending: false }),
   ]);
 
-  const settingsRow = unwrap<{ current_user_name: string; clinic_name: string } | null>(settings);
+  const settingsRow = unwrap<{
+    current_user_name: string;
+    clinic_name: string;
+    interview_link: string;
+  } | null>(settings);
   const roleRows = unwrap<RoleRow[]>(roles) ?? [];
   const critRows = unwrap<CriterionRow[]>(criteria) ?? [];
   const applicantRows = unwrap<ApplicantRow[]>(applicants) ?? [];
@@ -515,6 +554,7 @@ export const getAppState = createServerFn({ method: "GET" }).handler(async (): P
   return {
     currentUser: settingsRow?.current_user_name ?? "Jordan Avery",
     clinicName: settingsRow?.clinic_name ?? "Riverside Clinic Group",
+    interviewLink: settingsRow?.interview_link ?? "",
     roles: roleRows.map((r) => mapRole(r, critRows)),
     applicants: applicantRows.map((a) =>
       assembleApplicant(
@@ -583,35 +623,38 @@ export const addDocumentsFn = createServerFn({ method: "POST" })
     }
 
     // Re-screen against ALL documents on file (existing + new).
-    const allDocs = unwrap<DocRow[]>(
-      await sb
-        .from("applicant_documents")
-        .select("*")
-        .eq("applicant_id", data.applicantId),
-    ) ?? [];
-    const documentsText = allDocs
-      .map((d) => d.extracted_text?.trim())
-      .filter((t): t is string => !!t)
-      .join("\n\n");
+    const documentsText = await applicantDocumentsText(data.applicantId);
     const screening = documentsText
       ? await screenResume({ role: toRoleForAI(role), documentsText })
       : defaultScreening(role);
 
-    unwrap(
-      await sb
-        .from("applicants")
-        .update({
-          ai_score: screening.aiScore,
-          ai_decision: screening.aiDecision,
-          reasoning: screening.reasoning,
-          education: screening.education,
-          work_history: screening.workHistory,
-        })
-        .eq("id", data.applicantId)
-        .select("id"),
+    await persistScreening(data.applicantId, screening);
+    return loadApplicant(data.applicantId);
+  });
+
+/**
+ * Re-run AI screening against the applicant's existing documents (e.g. after new
+ * documents were added out-of-band). The prior assessment is only overwritten once a
+ * fresh result comes back — `screenResume` throws on transport failure, timeout, or
+ * invalid JSON, so a failed call leaves the existing assessment untouched. Refuses to
+ * run (rather than wipe with a neutral default) when there is no readable text.
+ */
+export const rescreenApplicantFn = createServerFn({ method: "POST" })
+  .validator((input: { applicantId: string }) => input)
+  .handler(async ({ data }) => {
+    const sb = getSupabase();
+    const appRow = unwrap<ApplicantRow>(
+      await sb.from("applicants").select("*").eq("id", data.applicantId).single(),
     );
-    unwrap(await sb.from("criteria_results").delete().eq("applicant_id", data.applicantId).select("id"));
-    await writeCriteriaResults(data.applicantId, screening);
+    const role = await loadRole(appRow.role_id);
+
+    const documentsText = await applicantDocumentsText(data.applicantId);
+    if (!documentsText) {
+      throw new Error("No readable document text to analyze. Add documents first.");
+    }
+
+    const screening = await screenResume({ role: toRoleForAI(role), documentsText });
+    await persistScreening(data.applicantId, screening);
     return loadApplicant(data.applicantId);
   });
 
@@ -645,6 +688,22 @@ export const analyzeTranscriptFn = createServerFn({ method: "POST" })
     );
     const role = await loadRole(appRow.role_id);
 
+    // Run the analysis BEFORE persisting anything: analyzeTranscriptText throws on
+    // transport failure or timeout, and letting it throw here means a failed run
+    // leaves no orphan transcript row behind — the applicant stays in its prior state.
+    const text = data.text?.trim() ?? "";
+    const analysis = text
+      ? await analyzeTranscriptText({
+          role: toRoleForAI(role),
+          screening: {
+            aiScore: appRow.ai_score,
+            aiDecision: appRow.ai_decision,
+            reasoning: appRow.reasoning,
+          },
+          transcriptText: text,
+        })
+      : null;
+
     const transcript = unwrap<TranscriptRow>(
       await sb
         .from("transcript_uploads")
@@ -658,19 +717,6 @@ export const analyzeTranscriptFn = createServerFn({ method: "POST" })
         .select("*")
         .single(),
     );
-
-    const text = data.text?.trim() ?? "";
-    const analysis = text
-      ? await analyzeTranscriptText({
-          role: toRoleForAI(role),
-          screening: {
-            aiScore: appRow.ai_score,
-            aiDecision: appRow.ai_decision,
-            reasoning: appRow.reasoning,
-          },
-          transcriptText: text,
-        })
-      : null;
 
     unwrap(
       await sb
@@ -926,6 +972,19 @@ export const setClinicNameFn = createServerFn({ method: "POST" })
         .select("id"),
     );
     return { clinicName: data.clinicName };
+  });
+
+export const setInterviewLinkFn = createServerFn({ method: "POST" })
+  .validator((input: { interviewLink: string }) => input)
+  .handler(async ({ data }) => {
+    unwrap(
+      await getSupabase()
+        .from("settings")
+        .update({ interview_link: data.interviewLink })
+        .eq("id", true)
+        .select("id"),
+    );
+    return { interviewLink: data.interviewLink };
   });
 
 /* ---------------- public (unauthenticated, scoped) ---------------- */

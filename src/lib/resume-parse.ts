@@ -96,7 +96,12 @@ async function extractPdf(file: File, maxPages: number): Promise<string> {
 }
 
 async function extractDocx(file: File): Promise<string> {
-  const mammoth = await import("mammoth");
+  // Use mammoth's pre-built browser bundle: the default entry calls `Buffer.from()`,
+  // which is undefined in the Vite client build and throws. The browser bundle ships
+  // its own Buffer polyfill. Types come from the default entry (same public API).
+  const mammoth = (await import(
+    "mammoth/mammoth.browser"
+  )) as unknown as typeof import("mammoth");
   const { value } = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   return value;
 }

@@ -17,10 +17,12 @@ import {
   clearDecisionFn,
   createBulkImportFn,
   getAppState,
+  rescreenApplicantFn,
   saveDecisionFn,
   saveFinalDecisionFn,
   sendInvitesFn,
   setClinicNameFn,
+  setInterviewLinkFn,
   setRoleStatusFn,
   upsertRoleFn,
   upsertTemplateFn,
@@ -40,6 +42,7 @@ import {
 let state: AppState = {
   currentUser: "",
   clinicName: "",
+  interviewLink: "",
   roles: [],
   applicants: [],
   templates: [],
@@ -149,6 +152,11 @@ export const actions = {
     setApplicant(applicant);
   },
 
+  async rescreenApplicant(applicantId: string): Promise<void> {
+    const applicant = await rescreenApplicantFn({ data: { applicantId } });
+    setApplicant(applicant);
+  },
+
   async createBulkImport(input: CreateBulkImportInput): Promise<string> {
     const record = await createBulkImportFn({ data: input });
     state = { ...state, bulkImports: [record, ...state.bulkImports] };
@@ -224,6 +232,12 @@ export const actions = {
   async setClinicName(name: string): Promise<void> {
     await setClinicNameFn({ data: { clinicName: name } });
     state = { ...state, clinicName: name };
+    emit();
+  },
+
+  async setInterviewLink(link: string): Promise<void> {
+    await setInterviewLinkFn({ data: { interviewLink: link } });
+    state = { ...state, interviewLink: link };
     emit();
   },
 };

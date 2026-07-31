@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -29,41 +28,50 @@ export function MarkInterviewedDialog({
   const navigate = useNavigate();
   const { currentUser } = useAppState();
   const [file, setFile] = useState<File | undefined>();
-  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setFile(undefined);
-      setAnalyzing(false);
-    }
+    if (open) setFile(undefined);
   }, [open]);
 
-  async function submit() {
+  function submit() {
     if (!file) return toast.error("Upload the interview transcript to analyse it.");
-    setAnalyzing(true);
-    try {
-      const { storagePath, text } = await prepareTranscript(file, "transcripts");
+
+    // Capture the file, close the dialog, and run in the background behind a toast so
+    // the user isn't stuck waiting. A failed run persists nothing (server rolls back),
+    // so the applicant stays in its previous, pre-interview state.
+    const chosen = file;
+    onOpenChange(false);
+
+    const run = (async () => {
+      const { storagePath, text } = await prepareTranscript(chosen, "transcripts");
       const result = await actions.analyzeTranscript(
         applicant.id,
-        { fileName: file.name, storagePath, text },
+        { fileName: chosen.name, storagePath, text },
         currentUser,
       );
       if (result?.errorFlag) {
-        toast.error(result.errorReason ?? "Couldn't analyse that transcript.");
-        return;
+        throw new Error(result.errorReason ?? "Couldn't analyse that transcript.");
       }
-      onOpenChange(false);
-      toast.success(`${applicant.name} marked as interviewed.`);
-      navigate({ to: "/applicants/$applicantId", params: { applicantId: applicant.id } });
-    } catch {
-      toast.error("Couldn't analyse that transcript. Please try again.");
-    } finally {
-      setAnalyzing(false);
-    }
+    })();
+
+    toast.promise(run, {
+      loading: `Analysing ${applicant.name}'s transcript…`,
+      success: `${applicant.name} marked as interviewed.`,
+      error: (err) =>
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't analyse that transcript. Please try again.",
+    });
+
+    run
+      .then(() =>
+        navigate({ to: "/applicants/$applicantId", params: { applicantId: applicant.id } }),
+      )
+      .catch(() => {});
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !analyzing && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Mark {applicant.name} as interviewed</DialogTitle>
@@ -84,17 +92,11 @@ export function MarkInterviewedDialog({
         />
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={analyzing}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={analyzing || !file}>
-            {analyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Analysing transcript…
-              </>
-            ) : (
-              "Mark as interviewed"
-            )}
+          <Button onClick={submit} disabled={!file}>
+            Mark as interviewed
           </Button>
         </DialogFooter>
       </DialogContent>

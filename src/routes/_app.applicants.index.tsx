@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search, Users } from "lucide-react";
+import { Search, Sparkles, Users } from "lucide-react";
 
 import { PageHeader, PageBody } from "@/components/page-header";
 import { ApplicantsTable } from "@/components/applicants-table";
+import { AcceptAiRecommendationsDialog } from "@/components/accept-ai-recommendations-dialog";
 import { EmptyState } from "@/components/empty-state";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -26,6 +28,12 @@ function ApplicantsPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [acceptAllOpen, setAcceptAllOpen] = useState(false);
+
+  const pending = useMemo(
+    () => applicants.filter((a) => a.humanDecision === null),
+    [applicants],
+  );
 
   const sorted = useMemo(
     () => [...applicants].sort((a, b) => b.submittedDate.localeCompare(a.submittedDate)),
@@ -41,7 +49,19 @@ function ApplicantsPage() {
 
   return (
     <>
-      <PageHeader title="Applicants" description="Every applicant across all roles." wide />
+      <PageHeader
+        title="Applicants"
+        description="Every applicant across all roles."
+        wide
+        action={
+          pending.length > 0 ? (
+            <Button onClick={() => setAcceptAllOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              Accept AI for {pending.length} pending
+            </Button>
+          ) : undefined
+        }
+      />
       <PageBody className="space-y-4" wide>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-56 flex-1">
@@ -91,6 +111,12 @@ function ApplicantsPage() {
           <ApplicantsTable applicants={filtered} roles={roles} showRole selectable />
         )}
       </PageBody>
+
+      <AcceptAiRecommendationsDialog
+        applicants={pending}
+        open={acceptAllOpen}
+        onOpenChange={setAcceptAllOpen}
+      />
     </>
   );
 }

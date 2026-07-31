@@ -132,6 +132,7 @@ export type WorkingStatus = "advanced" | "rejected" | "pending";
 export interface AppState {
   currentUser: string;
   clinicName: string;
+  interviewLink: string;
   roles: Role[];
   applicants: Applicant[];
   templates: EmailTemplate[];

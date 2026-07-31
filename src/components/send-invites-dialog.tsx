@@ -33,7 +33,7 @@ export function SendInvitesDialog({
   role: Role;
   recipients: Applicant[];
 }) {
-  const { templates, clinicName } = useAppState();
+  const { templates, clinicName, interviewLink } = useAppState();
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [sending, setSending] = useState(false);
 
@@ -113,6 +113,7 @@ export function SendInvitesDialog({
                     applicant_name: first.name,
                     role_title: role.title,
                     clinic_name: clinicName,
+                    interview_scheduling_link: interviewLink,
                   })}
                 </div>
                 <div className="whitespace-pre-wrap text-sm text-foreground">
@@ -120,6 +121,7 @@ export function SendInvitesDialog({
                     applicant_name: first.name,
                     role_title: role.title,
                     clinic_name: clinicName,
+                    interview_scheduling_link: interviewLink,
                   })}
                 </div>
               </div>

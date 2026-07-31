@@ -81,23 +81,42 @@ export function InterviewSection({
   const analysis = applicant.transcriptAnalysis;
   const hasValidAnalysis = !!analysis && !analysis.errorFlag;
 
-  async function analyse() {
+  function analyse() {
     if (!file) return toast.error("Upload a transcript first.");
+
+    // Run in the background behind a toast so the user isn't stuck on this screen.
+    // On any failure the picked file is kept, so the section stays in its previous
+    // state ready for a retry.
+    const chosen = file;
     setAnalyzing(true);
-    try {
-      const { storagePath, text } = await prepareTranscript(file, "transcripts");
+
+    const run = (async () => {
+      const { storagePath, text } = await prepareTranscript(chosen, "transcripts");
       const result = await actions.analyzeTranscript(
         applicant.id,
-        { fileName: file.name, storagePath, text },
+        { fileName: chosen.name, storagePath, text },
         currentUser,
       );
-      setFile(undefined);
-      if (result?.errorFlag) toast.error(result.errorReason ?? "Couldn't analyse that transcript.");
-    } catch {
-      toast.error("Couldn't analyse that transcript. Please try again.");
-    } finally {
-      setAnalyzing(false);
-    }
+      // A model-flagged transcript (too short / not an interview) is a failure too:
+      // throw so the toast reports why and the form stays put for another attempt.
+      if (result?.errorFlag) {
+        throw new Error(result.errorReason ?? "Couldn't analyse that transcript.");
+      }
+    })();
+
+    toast.promise(run, {
+      loading: "Analysing transcript…",
+      success: "Transcript analysed.",
+      error: (err) =>
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't analyse that transcript. Please try again.",
+    });
+
+    run
+      .then(() => setFile(undefined))
+      .catch(() => {})
+      .finally(() => setAnalyzing(false));
   }
 
   return (
@@ -107,11 +126,7 @@ export function InterviewSection({
         <StatusBadge tone="neutral">{lifecycleStageLabel[lifecycleStage(applicant)]}</StatusBadge>
       </div>
 
-      {analyzing ? (
-        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Analysing transcript…
-        </div>
-      ) : hasValidAnalysis ? (
+      {hasValidAnalysis ? (
         <>
           <AnalysisCard analysis={analysis} role={role} transcript={applicant.transcript} />
           <FinalDecisionBlock applicant={applicant} currentUser={currentUser} />
@@ -133,8 +148,14 @@ export function InterviewSection({
             onPickFile={setFile}
             onClear={() => setFile(undefined)}
           />
-          <Button onClick={analyse} disabled={!file}>
-            Analyse transcript
+          <Button onClick={analyse} disabled={!file || analyzing}>
+            {analyzing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" /> Analysing…
+              </>
+            ) : (
+              "Analyse transcript"
+            )}
           </Button>
         </div>
       )}

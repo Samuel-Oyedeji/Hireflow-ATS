@@ -30,7 +30,7 @@ const placeholders = [
   { token: "{{applicant_name}}", desc: "The applicant's full name" },
   { token: "{{role_title}}", desc: "The role they applied for" },
   { token: "{{clinic_name}}", desc: "Your clinic name" },
-  { token: "{{interview_scheduling_link}}", desc: "Booking link (future use)" },
+  { token: "{{interview_scheduling_link}}", desc: "Interview booking link (set in Settings)" },
 ];
 
 function TemplatesPage() {

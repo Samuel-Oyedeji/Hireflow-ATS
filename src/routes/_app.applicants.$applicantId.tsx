@@ -12,7 +12,7 @@ import {
   Loader2,
   Minus,
   Plus,
-  Scale,
+  RefreshCw,
   Sparkles,
   Users,
   X,
@@ -74,6 +74,7 @@ function ApplicantReviewPage() {
   const [choice, setChoice] = useState<HumanDecision>(null);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const [addDocsOpen, setAddDocsOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<ApplicantDocument | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -186,6 +187,24 @@ function ApplicantReviewPage() {
     }
   }
 
+  async function reanalyze() {
+    setReanalyzing(true);
+    try {
+      // Only overwrites the existing assessment if a fresh result comes back; a
+      // failed or timed-out request throws and leaves the prior result intact.
+      await actions.rescreenApplicant(applicant!.id);
+      toast.success("Re-analysis complete.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't re-analyze. The previous result was kept.",
+      );
+    } finally {
+      setReanalyzing(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -260,6 +279,93 @@ function ApplicantReviewPage() {
               </div>
             )}
 
+            {/* Human decision — kept at the top so the page's primary action
+            is visible on first look, with the assessment detail below it. */}
+            {showForm && (
+              <section className="rounded-lg border border-border bg-card px-3.5 py-1.5 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] text-muted-foreground">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="font-medium text-foreground">Your decision</span>
+                    <span className="text-border">·</span>
+                    AI recommends{" "}
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        suggested === "advance"
+                          ? "text-success"
+                          : "text-danger",
+                      )}
+                    >
+                      {suggested === "advance" ? "Advance" : "Reject"}
+                    </span>
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DecisionOption
+                      active={choice === "advance"}
+                      recommended={suggested === "advance"}
+                      tone="success"
+                      label="Advance"
+                      onClick={() => setChoice("advance")}
+                    />
+                    <DecisionOption
+                      active={choice === "reject"}
+                      recommended={suggested === "reject"}
+                      tone="danger"
+                      label="Reject"
+                      onClick={() => setChoice("reject")}
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 text-xs"
+                      onClick={save}
+                      disabled={!choice || saving}
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                        </>
+                      ) : (
+                        "Save"
+                      )}
+                    </Button>
+                    {editing && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-3 text-xs"
+                        onClick={() => setEditing(false)}
+                        disabled={saving}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {isOverride && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <Label
+                      htmlFor="override"
+                      className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-warning" />
+                      Overriding the AI — add a note (optional)
+                    </Label>
+                    <Textarea
+                      id="override"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Why are you changing this decision?"
+                      rows={2}
+                      className="mt-2 bg-card"
+                    />
+                  </div>
+                )}
+              </section>
+            )}
+
             {/* AI Screening Result */}
             <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
@@ -271,9 +377,28 @@ function ApplicantReviewPage() {
                 </div>
                 <div className="min-w-0 flex-1 space-y-4">
                   <div>
-                    <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                      AI screening result
-                    </h2>
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-primary">
+                        AI screening result
+                      </h2>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={reanalyze}
+                        disabled={reanalyzing}
+                      >
+                        {reanalyzing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" /> Analyzing…
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4" /> Re-analyze
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <p className="mt-2 text-sm leading-relaxed text-foreground">
                       {applicant.reasoning}
                     </p>
@@ -296,7 +421,7 @@ function ApplicantReviewPage() {
                   )}
 
                   <div>
-                    <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                       Criteria breakdown
                     </h3>
                     <ul className="divide-y divide-border rounded-md border border-border">
@@ -417,115 +542,6 @@ function ApplicantReviewPage() {
                 currentUser={currentUser}
               />
             )}
-
-            {/* Human decision */}
-            {showForm && (
-              <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-[var(--shadow-card)]">
-                <div className="flex flex-col gap-3 border-b border-border bg-[var(--surface-muted)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-primary ring-1 ring-primary/10">
-                      <Scale className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0">
-                      <h2 className="text-sm font-semibold text-foreground">
-                        Human decision
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        Confirm the AI's recommendation, or override it with a
-                        reason.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-[var(--shadow-sm)] sm:self-auto">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    AI suggests
-                    <span
-                      className={cn(
-                        "font-semibold",
-                        suggested === "advance" ? "text-success" : "text-danger",
-                      )}
-                    >
-                      {suggested === "advance" ? "Advance" : "Reject"}
-                    </span>
-                  </span>
-                </div>
-
-                <div className="p-6">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <DecisionButton
-                      active={choice === "advance"}
-                      suggested={suggested === "advance"}
-                      tone="success"
-                      label="Advance"
-                      hint="Move forward to interview"
-                      onClick={() => setChoice("advance")}
-                    />
-                    <DecisionButton
-                      active={choice === "reject"}
-                      suggested={suggested === "reject"}
-                      tone="danger"
-                      label="Reject"
-                      hint="Do not proceed with this applicant"
-                      onClick={() => setChoice("reject")}
-                    />
-                  </div>
-
-                  {isOverride && (
-                    <div className="mt-4 rounded-xl border border-warning/30 bg-warning-muted p-4">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
-                        <Label
-                          htmlFor="override"
-                          className="text-sm font-semibold text-warning"
-                        >
-                          You're overriding the AI recommendation
-                        </Label>
-                      </div>
-                      <p className="mt-1 pl-6 text-xs text-muted-foreground">
-                        Add a short reason if you like — optional, just for your
-                        own record.
-                      </p>
-                      <Textarea
-                        id="override"
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        placeholder="Why are you changing this decision?"
-                        rows={3}
-                        className="mt-3 bg-card"
-                      />
-                    </div>
-                  )}
-
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <Button onClick={save} disabled={!choice || saving}>
-                        {saving ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" /> Saving…
-                          </>
-                        ) : (
-                          "Save decision"
-                        )}
-                      </Button>
-                      {editing && (
-                        <Button
-                          variant="ghost"
-                          onClick={() => setEditing(false)}
-                          disabled={saving}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
-                    {!choice && (
-                      <span className="text-xs text-muted-foreground">
-                        Select a decision to continue
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </section>
-            )}
           </TabsContent>
 
           {hasTranscript && (
@@ -619,7 +635,7 @@ function ExtractedList({
 }) {
   return (
     <div>
-      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="h-3.5 w-3.5" />
         {title}
       </h3>
@@ -639,19 +655,17 @@ function ExtractedList({
   );
 }
 
-function DecisionButton({
+function DecisionOption({
   active,
-  suggested,
+  recommended,
   tone,
   label,
-  hint,
   onClick,
 }: {
   active: boolean;
-  suggested: boolean;
+  recommended: boolean;
   tone: "success" | "danger";
   label: string;
-  hint: string;
   onClick: () => void;
 }) {
   const Icon = tone === "success" ? Check : X;
@@ -661,64 +675,28 @@ function DecisionButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl border p-4 text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card active:scale-[0.99]",
+        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card active:scale-[0.98]",
         active
           ? tone === "success"
-            ? "border-success bg-success-muted ring-1 ring-success/40"
-            : "border-danger bg-danger-muted ring-1 ring-danger/40"
-          : "border-border bg-card hover:-translate-y-px hover:border-primary/30 hover:bg-accent/40 hover:shadow-[var(--shadow-sm)]",
+            ? "border-success bg-success-muted text-success ring-1 ring-success/40"
+            : "border-danger bg-danger-muted text-danger ring-1 ring-danger/40"
+          : recommended
+            ? "border-primary/40 bg-card text-foreground ring-2 ring-primary/15 hover:-translate-y-px hover:shadow-[var(--shadow-sm)]"
+            : "border-border bg-card text-foreground hover:-translate-y-px hover:border-primary/30 hover:bg-accent/40 hover:shadow-[var(--shadow-sm)]",
       )}
     >
-      <span
+      <Icon
         className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
-          active
-            ? tone === "success"
-              ? "bg-success text-success-foreground"
-              : "bg-danger text-danger-foreground"
-            : tone === "success"
-              ? "bg-success-muted text-success"
-              : "bg-danger-muted text-danger",
+          "h-3.5 w-3.5",
+          active ? "" : tone === "success" ? "text-success" : "text-danger",
         )}
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span
-            className={cn(
-              "text-sm font-semibold",
-              active
-                ? tone === "success"
-                  ? "text-success"
-                  : "text-danger"
-                : "text-foreground",
-            )}
-          >
-            {label}
-          </span>
-          {suggested && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-              Suggested
-            </span>
-          )}
+      />
+      {label}
+      {recommended && !active && (
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+          AI pick
         </span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-          {hint}
-        </span>
-      </span>
-      <span
-        className={cn(
-          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-          active
-            ? tone === "success"
-              ? "border-success bg-success text-success-foreground"
-              : "border-danger bg-danger text-danger-foreground"
-            : "border-border text-transparent group-hover:border-primary/40",
-        )}
-      >
-        <Check className="h-3 w-3" />
-      </span>
+      )}
     </button>
   );
 }

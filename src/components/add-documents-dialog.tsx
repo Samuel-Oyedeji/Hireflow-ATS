@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -33,36 +32,45 @@ export function AddDocumentsDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [files, setFiles] = useState<Record<string, File>>({});
-  const [screening, setScreening] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setFiles({});
-      setScreening(false);
-    }
+    if (open) setFiles({});
   }, [open]);
 
-  async function submit() {
+  function submit() {
     const picked = slots.filter((s) => files[s.type]);
     if (picked.length === 0) return toast.error("Add at least one document.");
 
-    setScreening(true);
-    try {
+    // Capture the picked files, then close and run in the background so the user
+    // isn't stuck on the dialog while screening runs. A toast reports progress.
+    const chosen = picked.map((s) => ({
+      file: files[s.type],
+      name: s.label,
+      type: s.type,
+    }));
+    onOpenChange(false);
+
+    const run = (async () => {
       const documents = await Promise.all(
-        picked.map((s) => prepareDocument(files[s.type], { name: s.label, type: s.type }, "resumes")),
+        chosen.map((c) =>
+          prepareDocument(c.file, { name: c.name, type: c.type }, "resumes"),
+        ),
       );
       await actions.addDocuments(applicantId, documents);
-      onOpenChange(false);
-      toast.success("Documents added — screening updated.");
-    } catch {
-      toast.error("Something went wrong while re-screening. Please try again.");
-    } finally {
-      setScreening(false);
-    }
+    })();
+
+    toast.promise(run, {
+      loading: "Re-screening with the new documents…",
+      success: "Documents added — screening updated.",
+      error: (err) =>
+        err instanceof Error && err.message
+          ? err.message
+          : "Something went wrong while re-screening. Please try again.",
+    });
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !screening && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add documents</DialogTitle>
@@ -78,6 +86,8 @@ export function AddDocumentsDialog({
               key={s.type}
               label={s.label}
               optional
+              accept=".pdf,.doc,.docx,.txt"
+              hint="PDF, DOCX, or TXT"
               fileName={files[s.type]?.name}
               onPick={() => {}}
               onPickFile={(f) => setFiles((prev) => ({ ...prev, [s.type]: f }))}
@@ -93,18 +103,10 @@ export function AddDocumentsDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={screening}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={screening}>
-            {screening ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Re-screening…
-              </>
-            ) : (
-              "Add & re-screen"
-            )}
-          </Button>
+          <Button onClick={submit}>Add &amp; re-screen</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

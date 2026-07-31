@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -36,56 +35,61 @@ export function BulkMarkInterviewedDialog({
 }) {
   const { currentUser } = useAppState();
   const [files, setFiles] = useState<Record<string, File>>({});
-  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setFiles({});
-      setAnalyzing(false);
-    }
+    if (open) setFiles({});
   }, [open]);
 
   const ready = applicants.filter((a) => files[a.id]);
 
-  async function submit() {
+  function submit() {
     if (ready.length === 0)
       return toast.error("Upload a transcript for at least one applicant.");
 
-    setAnalyzing(true);
-    try {
+    // Capture the picked transcripts, close the dialog, and process in the background
+    // behind a single toast so the user isn't stuck waiting. Each applicant that fails
+    // is left untouched (the server rolls back), so only successes move to interviewed.
+    const chosen = ready.map((a) => ({ id: a.id, name: a.name, file: files[a.id] }));
+    onOpenChange(false);
+
+    const toastId = toast.loading(
+      `Analysing ${chosen.length} transcript${chosen.length === 1 ? "" : "s"}…`,
+    );
+
+    void (async () => {
       const failed: string[] = [];
       let succeeded = 0;
-      for (const a of ready) {
+      for (const c of chosen) {
         try {
-          const { storagePath, text } = await prepareTranscript(files[a.id], "transcripts");
+          const { storagePath, text } = await prepareTranscript(c.file, "transcripts");
           const result = await actions.analyzeTranscript(
-            a.id,
-            { fileName: files[a.id].name, storagePath, text },
+            c.id,
+            { fileName: c.file.name, storagePath, text },
             currentUser,
           );
-          if (result?.errorFlag) failed.push(a.name);
+          if (result?.errorFlag) failed.push(c.name);
           else succeeded += 1;
         } catch {
-          failed.push(a.name);
+          failed.push(c.name);
         }
       }
 
-      if (succeeded > 0)
-        toast.success(
-          `${succeeded} applicant${succeeded === 1 ? "" : "s"} marked as interviewed.`,
-        );
-      if (failed.length > 0)
-        toast.error(`Couldn't analyse the transcript for ${failed.join(", ")}.`);
+      const marked = `${succeeded} applicant${succeeded === 1 ? "" : "s"} marked as interviewed`;
+      const couldNot = `Couldn't analyse the transcript for ${failed.join(", ")}.`;
+      if (failed.length === 0) {
+        toast.success(`${marked}.`, { id: toastId });
+      } else if (succeeded === 0) {
+        toast.error(couldNot, { id: toastId });
+      } else {
+        toast.error(`${marked}. ${couldNot}`, { id: toastId });
+      }
 
-      onOpenChange(false);
       onDone?.();
-    } finally {
-      setAnalyzing(false);
-    }
+    })();
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !analyzing && onOpenChange(v)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
@@ -125,17 +129,11 @@ export function BulkMarkInterviewedDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={analyzing}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={analyzing || ready.length === 0}>
-            {analyzing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Analysing transcripts…
-              </>
-            ) : (
-              `Mark ${ready.length} interviewed`
-            )}
+          <Button onClick={submit} disabled={ready.length === 0}>
+            {`Mark ${ready.length} interviewed`}
           </Button>
         </DialogFooter>
       </DialogContent>

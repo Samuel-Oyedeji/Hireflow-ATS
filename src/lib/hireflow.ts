@@ -95,13 +95,18 @@ export function inviteEligible(applicants: Applicant[], roleId: string): Applica
 
 export function renderTemplate(
   text: string,
-  vars: { applicant_name: string; role_title: string; clinic_name: string },
+  vars: {
+    applicant_name: string;
+    role_title: string;
+    clinic_name: string;
+    interview_scheduling_link: string;
+  },
 ): string {
   return text
     .replaceAll("{{applicant_name}}", vars.applicant_name)
     .replaceAll("{{role_title}}", vars.role_title)
     .replaceAll("{{clinic_name}}", vars.clinic_name)
-    .replaceAll("{{interview_scheduling_link}}", "https://riverside-clinic.example/book/abc123");
+    .replaceAll("{{interview_scheduling_link}}", vars.interview_scheduling_link);
 }
 
 export function roleById(roles: Role[], id: string): Role | undefined {

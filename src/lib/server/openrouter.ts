@@ -19,6 +19,7 @@ export interface RoleForAI {
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_TEXT = 24000; // keep prompts bounded
+const REQUEST_TIMEOUT_MS = 60000; // abort a hung request rather than wait forever
 
 function stripCodeFences(text: string): string {
   const trimmed = text.trim();
@@ -55,7 +56,12 @@ async function chatJSON<T>(args: {
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(OPENROUTER_URL, { method: "POST", headers, body });
+    const res = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`OpenRouter request failed (${res.status}): ${text.slice(0, 500)}`);
@@ -79,12 +85,33 @@ async function chatJSON<T>(args: {
 
 /* ---------------- Resume screening ---------------- */
 
+/** Flatten one education / work-history entry to a single display line. */
+function toLine(item: unknown): string {
+  if (typeof item === "string") return item.trim();
+  if (item && typeof item === "object") {
+    return Object.values(item as Record<string, unknown>)
+      .filter((v) => v != null && v !== "")
+      .map(String)
+      .join(" — ")
+      .trim();
+  }
+  return item == null ? "" : String(item).trim();
+}
+
+/**
+ * Education / work-history list. Small or free models often return these as arrays of
+ * objects (e.g. { degree, field, year }) rather than the requested single-line strings.
+ * Accept any item shape here and flatten it in normalizeScreening, so an otherwise-valid
+ * response still screens instead of failing the parse.
+ */
+const lineList = z.array(z.unknown()).nullish();
+
 const screeningSchema = z.object({
   aiScore: z.number(),
   aiDecision: z.enum(["advanced", "rejected"]),
   reasoning: z.string(),
-  education: z.array(z.string()).nullish(),
-  workHistory: z.array(z.string()).nullish(),
+  education: lineList,
+  workHistory: lineList,
   criteriaResults: z.array(
     z.object({
       criterionId: z.string(),
@@ -124,8 +151,8 @@ function normalizeScreening(
     aiScore,
     aiDecision: parsed.aiDecision,
     reasoning: parsed.reasoning,
-    education: parsed.education ?? [],
-    workHistory: parsed.workHistory ?? [],
+    education: (parsed.education ?? []).map(toLine).filter((s) => s.length > 0),
+    workHistory: (parsed.workHistory ?? []).map(toLine).filter((s) => s.length > 0),
     criteriaResults,
   };
 }
@@ -158,7 +185,7 @@ Return JSON exactly in this shape:
 {
   "aiScore": <integer 0-100 overall fit against the criteria>,
   "aiDecision": "advanced" | "rejected",
-  "reasoning": "<2-4 sentences citing the criteria and the evidence>",
+  "reasoning": "<3-5 sentences: assess overall fit against the criteria with evidence, then add depth by noting job-relevant traits the documents reasonably suggest about the candidate (e.g. initiative, career progression, breadth of responsibility, ownership) even when not stated outright — infer only from what the documents actually show, never fabricate>",
   "education": ["<one concise line per qualification, e.g. 'BSc Nursing — University of Lagos (2018–2022)'>"],
   "workHistory": ["<one concise line per role, e.g. 'Staff Nurse — Riverside Clinic (2022–present): triage, med administration'>"],
   "criteriaResults": [
